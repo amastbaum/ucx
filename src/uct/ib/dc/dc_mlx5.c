@@ -921,6 +921,9 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
         same_version = ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ==
                         iface->version_flag);
         if (!same_version || !same_tm) {
+            uct_iface_populate_info_str_buf(
+                        params, "incompatible tag matching and dc version");
+
             return 0;
         }
     }

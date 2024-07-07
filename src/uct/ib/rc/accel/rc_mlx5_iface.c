@@ -713,6 +713,9 @@ uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                  iface_addr, IFACE_ADDR, NULL);
     /* Check hardware tag matching compatibility */
     if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
+        uct_iface_populate_info_str_buf(
+                            params, "incompatible hardware tag matching");
+
         return 0;
     }
 

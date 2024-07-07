@@ -24,6 +24,7 @@
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
+#define UCP_WIREUP_INFO_STRING_SIZE 256
 
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
@@ -397,6 +398,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_context_h context                         = worker->context;
     ucp_wireup_select_info_t sinfo                = {0};
     int found                                     = 0;
+    char *wireup_info;
     ucp_wireup_select_flags_t local_iface_flags = criteria->local_iface_flags;
     int has_cm;
     uint64_t local_md_flags;
@@ -594,12 +596,22 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             UCS_STATIC_BITMAP_AND_INPLACE(&rsc_addr_index_map, addr_index_map);
         }
 
+        wireup_info = (char *)ucs_malloc(UCP_WIREUP_INFO_STRING_SIZE,
+                                         "ucp wireup info string");
+        if (wireup_info == NULL) {
+            ucs_error("failed to allocate wireup info string");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        wireup_info[0] = '\0';
+
         is_reachable = 0;
 
         UCS_STATIC_BITMAP_FOR_EACH_BIT(addr_index, &rsc_addr_index_map) {
             ae = &address->address_list[addr_index];
             if (!ucp_wireup_is_reachable(ep, select_params->ep_init_flags,
-                                         rsc_index, ae)) {
+                                         rsc_index, ae, wireup_info,
+                                         UCP_WIREUP_INFO_STRING_SIZE)) {
                 /* Must be reachable device address, on same transport */
                 continue;
             }
@@ -625,8 +637,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         /* If a local resource cannot reach any of the remote addresses,
          * generate debug message. */
         if (!is_reachable) {
-            ucs_trace(UCT_TL_RESOURCE_DESC_FMT" : unreachable ",
-                      UCT_TL_RESOURCE_DESC_ARG(resource));
+            ucs_diag(UCT_TL_RESOURCE_DESC_FMT" : unreachable [%s]",
+                     UCT_TL_RESOURCE_DESC_ARG(resource), wireup_info);
             snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - %s, ",
                      UCT_TL_RESOURCE_DESC_ARG(resource),
                      ucs_status_string(UCS_ERR_UNREACHABLE));
