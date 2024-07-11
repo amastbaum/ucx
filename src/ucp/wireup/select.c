@@ -421,6 +421,13 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uint8_t priority;
     ucp_md_index_t md_index;
 
+    wireup_info = (char *)ucs_malloc(UCP_WIREUP_INFO_STRING_SIZE,
+                                        "ucp wireup info string");
+    if (wireup_info == NULL) {
+        ucs_error("failed to allocate wireup info string");
+        return UCS_ERR_NO_MEMORY;
+    }
+
     p            = tls_info;
     endp         = tls_info + sizeof(tls_info) - 1;
     tls_info[0]  = '\0';
@@ -596,13 +603,6 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             UCS_STATIC_BITMAP_AND_INPLACE(&rsc_addr_index_map, addr_index_map);
         }
 
-        wireup_info = (char *)ucs_malloc(UCP_WIREUP_INFO_STRING_SIZE,
-                                         "ucp wireup info string");
-        if (wireup_info == NULL) {
-            ucs_error("failed to allocate wireup info string");
-            return UCS_ERR_NO_MEMORY;
-        }
-
         wireup_info[0] = '\0';
 
         is_reachable = 0;
@@ -650,6 +650,8 @@ out:
     if (p >= tls_info + 2) {
         *(p - 2) = '\0'; /* trim last "," */
     }
+
+    free(wireup_info);
 
     if (!found) {
         if (show_error) {
