@@ -626,8 +626,8 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     uct_ib_roce_version_t remote_roce_ver;
     sa_family_t remote_ib_addr_af;
     char local_str[128], remote_str[128];
-    char *local_str_p = local_str;
-    char *remote_str_p = remote_str;
+    const char *local_str_p = local_str;
+    const char *remote_str_p = remote_str;
     uint8_t *local_addr, *remote_addr;
     ucs_status_t status;
     size_t addr_offset;
