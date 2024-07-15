@@ -626,6 +626,8 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     uct_ib_roce_version_t remote_roce_ver;
     sa_family_t remote_ib_addr_af;
     char local_str[128], remote_str[128];
+    char *local_str_p = local_str;
+    char *remote_str_p = remote_str;
     uint8_t *local_addr, *remote_addr;
     ucs_status_t status;
     size_t addr_offset;
@@ -707,14 +709,16 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
 
     /* check if the addresses have matching prefixes */
     ret = ucs_bitwise_is_equal(local_addr, remote_addr, prefix_bits);
+    local_str_p = inet_ntop(local_ib_addr_af, local_addr, local_str, 128);
+    remote_str_p = inet_ntop(remote_ib_addr_af, remote_addr, remote_str, 128);
 
     ucs_debug(ret ? "IP addresses match with a %u-bit prefix: local IP is %s,"
                     " remote IP is %s" :
                     "IP addresses do not match with a %u-bit prefix. local IP"
                     " is %s, remote IP is %s",
               prefix_bits,
-              inet_ntop(local_ib_addr_af, local_addr, local_str, 128),
-              inet_ntop(remote_ib_addr_af, remote_addr, remote_str, 128));
+              local_str_p,
+              remote_str_p);
 
     if (!ret) {
         uct_iface_populate_info_str_buf(
@@ -722,8 +726,8 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                     "IP addresses do not match with a %u-bit prefix. local IP"
                     " is %s, remote IP is %s",
                     prefix_bits,
-                    inet_ntop(local_ib_addr_af, local_addr, local_str, 128),
-                    inet_ntop(remote_ib_addr_af, remote_addr, remote_str, 128));
+                    local_str_p,
+                    remote_str_p);
     }
 
     return ret;
