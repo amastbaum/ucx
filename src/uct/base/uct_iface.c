@@ -257,7 +257,7 @@ void uct_iface_populate_info_str_buf(
     va_start(args, fmt);
 
     if (info_str_buf && info_str_buf_len > 0 && info_str_buf[0] == '\0') {
-        snprintf(info_str_buf, info_str_buf_len, fmt, args);
+        ucs_vsnprintf_safe(info_str_buf, info_str_buf_len, fmt, args);
     }
 
     va_end(args);
