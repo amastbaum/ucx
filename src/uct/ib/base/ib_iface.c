@@ -645,25 +645,25 @@ static int
 uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                                const uct_ib_address_t *remote_ib_addr,
                                unsigned prefix_bits,
+                               uct_ib_iface_t *iface,
                                const uct_iface_is_reachable_params_t *params)
 {
     sa_family_t local_ib_addr_af         = local_gid_info->roce_info.addr_family;
     uct_ib_roce_version_t local_roce_ver = local_gid_info->roce_info.ver;
     uint8_t remote_ib_addr_flags         = remote_ib_addr->flags;
+    uct_ib_device_t *dev                 = uct_ib_iface_device(iface);
+    uint8_t port_num                     = iface->config.port_num;
     struct sockaddr_storage sa_local, sa_remote;
     uct_ib_roce_version_t remote_roce_ver;
     sa_family_t remote_ib_addr_af;
     char local_str[128], remote_str[128];
     int matched;
+    char ndev_name[IFNAMSIZ];
+    ucs_status_t status;
 
     /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases) */
     if ((uct_ib_address_flags_get_roce_version(remote_ib_addr_flags)) ==
          UCT_IB_DEVICE_ROCE_ANY) {
-        return 1;
-    }
-
-    /* check for zero-sized netmask */
-    if (prefix_bits == 0) {
         return 1;
     }
 
@@ -695,7 +695,7 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                                             &local_gid_info->gid,
                                             &sa_local) != UCS_OK)) {
         uct_iface_fill_info_str_buf(
-               params, "Couldn't convert local RoCE address to socket address");
+               params, "couldn't convert local RoCE address to socket address");
         return 0;
     }
 
@@ -703,8 +703,26 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                                            remote_ib_addr + 1,
                                            &sa_remote) != UCS_OK) {
         uct_iface_fill_info_str_buf(
-               params, "Couldn't convert remote RoCE address to socket address");
+               params, "couldn't convert remote RoCE address to socket address");
         return 0;
+    }
+
+    status = uct_ib_device_get_roce_ndev_name(dev, port_num,
+                                              local_gid_info->gid_index,
+                                              ndev_name, sizeof(ndev_name));
+    if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(
+               params, "couldn't get network interface name");
+        return 0;
+    }
+
+    if (!uct_iface_is_reachable_by_routing(params, ndev_name, &sa_remote)) {
+        return 0;
+    }
+
+    /* check for zero-sized netmask */
+    if (prefix_bits == 0) {
+        return 1;
     }
 
     matched = ucs_sockaddr_is_same_subnet((struct sockaddr*)&sa_local,
@@ -829,6 +847,7 @@ static int uct_ib_iface_dev_addr_is_reachable(
          * and address families have to be the same */
         return uct_ib_iface_roce_is_reachable(&iface->gid_info, ib_addr,
                                               iface->addr_prefix_bits,
+                                              iface,
                                               is_reachable_params);
     } else {
         /* local and remote have different link layers and therefore are unreachable */

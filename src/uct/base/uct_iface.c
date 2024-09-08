@@ -18,10 +18,13 @@
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <linux/rtnetlink.h>
 
+#define NETLINK_BUFFER_SIZE 4096
 
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
@@ -1032,6 +1035,136 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
         return 0;
     }
     return 1;
+}
+
+int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *params,
+                                      const char *ndev_name,
+                                      struct sockaddr_storage *sa_remote)
+{
+    struct sockaddr_nl sa;
+    struct nlmsghdr *nlh, *nlmsg;
+    struct rtmsg *rtm;
+    struct rtattr *rta;
+    int sock, len, rta_len;
+    char msgbuf[NETLINK_BUFFER_SIZE], buf[NETLINK_BUFFER_SIZE];
+    unsigned int dest, network, mask;
+    int reachable = 0;
+    int if_index;
+    int family;
+    int route_if_index;
+
+    /* determine address family and extract IP */
+    if (sa_remote->ss_family == AF_INET) {
+        struct sockaddr_in *sin = (struct sockaddr_in *)sa_remote;
+        dest = sin->sin_addr.s_addr;
+        family = AF_INET;
+    } else if (sa_remote->ss_family == AF_INET6) {
+        fprintf(stderr, "IPv6 is not supported in this version\n");
+        return -1;
+    } else {
+        fprintf(stderr, "Unsupported address family\n");
+        return -1;
+    }
+
+    /* get interface index */
+    if_index = if_nametoindex(ndev_name);
+    if (if_index == 0) {
+        perror("Failed to get interface index");
+        return -1;
+    }
+
+    sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    if (sock < 0) {
+        perror("Failed to open netlink socket");
+        return -1;
+    }
+
+    memset(&sa, 0, sizeof(sa));
+    sa.nl_family = AF_NETLINK;
+
+    if (bind(sock, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        perror("Failed to bind netlink socket");
+        close(sock);
+        return -1;
+    }
+
+    /* prepare the message */
+    memset(msgbuf, 0, sizeof(msgbuf));
+    nlh = (struct nlmsghdr *)msgbuf;
+    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+    nlh->nlmsg_type = RTM_GETROUTE;
+    nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    nlh->nlmsg_seq = 1;
+    nlh->nlmsg_pid = getpid();
+
+    rtm = (struct rtmsg *)NLMSG_DATA(nlh);
+    rtm->rtm_family = family;
+    rtm->rtm_table = RT_TABLE_MAIN;
+
+    /* send the request */
+    if (send(sock, nlh, nlh->nlmsg_len, 0) < 0) {
+        perror("Failed to send netlink message");
+        close(sock);
+        return -1;
+    }
+
+    /* receive the response */
+    do {
+        len = recv(sock, buf, sizeof(buf), 0);
+        if (len < 0) {
+            perror("Failed to receive netlink message");
+            close(sock);
+            return -1;
+        }
+
+        nlmsg = (struct nlmsghdr *)buf;
+        for (; NLMSG_OK(nlmsg, len); nlmsg = NLMSG_NEXT(nlmsg, len)) {
+            if (nlmsg->nlmsg_type == NLMSG_DONE) {
+                break;
+            }
+
+            if (nlmsg->nlmsg_type == NLMSG_ERROR) {
+                perror("Netlink error");
+                close(sock);
+                return -1;
+            }
+
+            rtm = (struct rtmsg *)NLMSG_DATA(nlmsg);
+            if (rtm->rtm_family != family) {
+                continue;
+            }
+
+            rta = (struct rtattr *)RTM_RTA(rtm);
+            rta_len = RTM_PAYLOAD(nlmsg);
+
+            network = 0;
+            mask = 0;
+            route_if_index = 0;
+
+            for (; RTA_OK(rta, rta_len); rta = RTA_NEXT(rta, rta_len)) {
+                switch (rta->rta_type) {
+                    case RTA_DST:
+                        network = *(unsigned int *)RTA_DATA(rta);
+                        break;
+                    case RTA_OIF:
+                        route_if_index = *(int *)RTA_DATA(rta);
+                        break;
+                }
+            }
+
+            /* calculate the subnet mask */
+            mask = htonl(~((1 << (32 - rtm->rtm_dst_len)) - 1));
+
+            /* check if the destination IP is in this network */
+            if ((dest & mask) == (network & mask) && route_if_index == if_index) {
+                reachable = 1;
+                break;
+            }
+        }
+    } while (!reachable && nlmsg->nlmsg_type != NLMSG_DONE);
+
+    close(sock);
+    return reachable;
 }
 
 void uct_iface_mpool_config_copy(ucs_mpool_params_t *mp_params,
