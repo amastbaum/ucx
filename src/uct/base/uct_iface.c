@@ -1048,10 +1048,11 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     int sock, len, rta_len;
     char msgbuf[NETLINK_BUFFER_SIZE], buf[NETLINK_BUFFER_SIZE];
     unsigned int dest, network, mask;
-    int reachable = 0;
     int if_index;
     int family;
     int route_if_index;
+    char ip_str[32];
+    int reachable = 0;
 
     /* determine address family and extract IP */
     if (sa_remote->ss_family == AF_INET) {
@@ -1059,33 +1060,38 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
         dest = sin->sin_addr.s_addr;
         family = AF_INET;
     } else if (sa_remote->ss_family == AF_INET6) {
-        fprintf(stderr, "IPv6 is not supported in this version\n");
-        return -1;
+        uct_iface_fill_info_str_buf(
+                    params, "IPv6 is not supported in this version");
+        return 0;
     } else {
-        fprintf(stderr, "Unsupported address family\n");
-        return -1;
+        uct_iface_fill_info_str_buf(
+                    params, "Unsupported address family\n");
+        return 0;
     }
 
     /* get interface index */
     if_index = if_nametoindex(ndev_name);
     if (if_index == 0) {
-        perror("Failed to get interface index");
-        return -1;
+        uct_iface_fill_info_str_buf(
+                    params, "Failed to get interface index");
+        return 0;
     }
 
     sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (sock < 0) {
-        perror("Failed to open netlink socket");
-        return -1;
+        uct_iface_fill_info_str_buf(
+                    params, "Failed to open netlink socket");
+        return 0;
     }
 
     memset(&sa, 0, sizeof(sa));
     sa.nl_family = AF_NETLINK;
 
     if (bind(sock, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-        perror("Failed to bind netlink socket");
+        uct_iface_fill_info_str_buf(
+                    params, "Failed to bind netlink socket");
         close(sock);
-        return -1;
+        return 0;
     }
 
     /* prepare the message */
@@ -1103,18 +1109,19 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
 
     /* send the request */
     if (send(sock, nlh, nlh->nlmsg_len, 0) < 0) {
-        perror("Failed to send netlink message");
+        uct_iface_fill_info_str_buf(params, "failed to send netlink message");
         close(sock);
-        return -1;
+        return 0;
     }
 
     /* receive the response */
     do {
         len = recv(sock, buf, sizeof(buf), 0);
         if (len < 0) {
-            perror("Failed to receive netlink message");
+            uct_iface_fill_info_str_buf(params,
+                                        "failed to receive netlink message");
             close(sock);
-            return -1;
+            return 0;
         }
 
         nlmsg = (struct nlmsghdr *)buf;
@@ -1124,9 +1131,9 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
             }
 
             if (nlmsg->nlmsg_type == NLMSG_ERROR) {
-                perror("Netlink error");
+                uct_iface_fill_info_str_buf(params, "netlink error");
                 close(sock);
-                return -1;
+                return 0;
             }
 
             rtm = (struct rtmsg *)NLMSG_DATA(nlmsg);
@@ -1138,7 +1145,6 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
             rta_len = RTM_PAYLOAD(nlmsg);
 
             network = 0;
-            mask = 0;
             route_if_index = 0;
 
             for (; RTA_OK(rta, rta_len); rta = RTA_NEXT(rta, rta_len)) {
@@ -1164,6 +1170,13 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     } while (!reachable && nlmsg->nlmsg_type != NLMSG_DONE);
 
     close(sock);
+
+    if (!reachable) {
+        uct_iface_fill_info_str_buf(
+                    params, "remote IP %s is not reachable through routing",
+                    ucs_sockaddr_str((struct sockaddr *)&sa_remote, ip_str, 32));
+    }
+
     return reachable;
 }
 
