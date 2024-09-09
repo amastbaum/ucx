@@ -1047,40 +1047,37 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     struct rtattr *rta;
     int sock, len, rta_len;
     char msgbuf[NETLINK_BUFFER_SIZE], buf[NETLINK_BUFFER_SIZE];
-    unsigned int dest, network, mask;
     int if_index;
     int family;
     int route_if_index;
-    char ip_str[32];
+    char ip_str[INET6_ADDRSTRLEN];
+    void *dest_addr;
     int reachable = 0;
 
     /* determine address family and extract IP */
     if (sa_remote->ss_family == AF_INET) {
         struct sockaddr_in *sin = (struct sockaddr_in *)sa_remote;
-        dest = sin->sin_addr.s_addr;
+        dest_addr = &(sin->sin_addr);
         family = AF_INET;
     } else if (sa_remote->ss_family == AF_INET6) {
-        uct_iface_fill_info_str_buf(
-                    params, "IPv6 is not supported in this version");
-        return 0;
+        struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sa_remote;
+        dest_addr = &(sin6->sin6_addr);
+        family = AF_INET6;
     } else {
-        uct_iface_fill_info_str_buf(
-                    params, "Unsupported address family\n");
+        uct_iface_fill_info_str_buf(params, "unsupported address family");
         return 0;
     }
 
     /* get interface index */
     if_index = if_nametoindex(ndev_name);
     if (if_index == 0) {
-        uct_iface_fill_info_str_buf(
-                    params, "Failed to get interface index");
+        uct_iface_fill_info_str_buf(params, "failed to get interface index");
         return 0;
     }
 
     sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (sock < 0) {
-        uct_iface_fill_info_str_buf(
-                    params, "Failed to open netlink socket");
+        uct_iface_fill_info_str_buf(params, "failed to open netlink socket");
         return 0;
     }
 
@@ -1088,8 +1085,7 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     sa.nl_family = AF_NETLINK;
 
     if (bind(sock, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-        uct_iface_fill_info_str_buf(
-                    params, "Failed to bind netlink socket");
+        uct_iface_fill_info_str_buf(params, "failed to bind netlink socket");
         close(sock);
         return 0;
     }
@@ -1116,10 +1112,10 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
 
     /* receive the response */
     do {
+        void *network = NULL;
         len = recv(sock, buf, sizeof(buf), 0);
         if (len < 0) {
-            uct_iface_fill_info_str_buf(params,
-                                        "failed to receive netlink message");
+            uct_iface_fill_info_str_buf(params, "failed to receive netlink message");
             close(sock);
             return 0;
         }
@@ -1144,13 +1140,12 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
             rta = (struct rtattr *)RTM_RTA(rtm);
             rta_len = RTM_PAYLOAD(nlmsg);
 
-            network = 0;
             route_if_index = 0;
 
             for (; RTA_OK(rta, rta_len); rta = RTA_NEXT(rta, rta_len)) {
                 switch (rta->rta_type) {
                     case RTA_DST:
-                        network = *(unsigned int *)RTA_DATA(rta);
+                        network = RTA_DATA(rta);
                         break;
                     case RTA_OIF:
                         route_if_index = *(int *)RTA_DATA(rta);
@@ -1158,13 +1153,43 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
                 }
             }
 
-            /* calculate the subnet mask */
-            mask = htonl(~((1 << (32 - rtm->rtm_dst_len)) - 1));
+            if (network == NULL) {
+                continue;
+            }
 
             /* check if the destination IP is in this network */
-            if ((dest & mask) == (network & mask) && route_if_index == if_index) {
-                reachable = 1;
-                break;
+            if (family == AF_INET) {
+                struct in_addr *network_addr = (struct in_addr *)network;
+                struct in_addr *dest = (struct in_addr *)dest_addr;
+                uint32_t mask = htonl(~((1 << (32 - rtm->rtm_dst_len)) - 1));
+                if ((dest->s_addr & mask) == (network_addr->s_addr & mask) &&
+                    route_if_index == if_index) {
+                    reachable = 1;
+                    break;
+                }
+            } else { /* AF_INET6 */
+                struct in6_addr *network_addr = (struct in6_addr *)network;
+                struct in6_addr *dest = (struct in6_addr *)dest_addr;
+                struct in6_addr mask;
+                struct in6_addr masked_dest, masked_network;
+                int i;
+                for (i = 0; i < 16; i++) {
+                    if (rtm->rtm_dst_len > i * 8)
+                        mask.s6_addr[i] = 0xFF << (8 - ((rtm->rtm_dst_len - i * 8) % 8));
+                    else
+                        mask.s6_addr[i] = 0;
+                }
+
+                for (i = 0; i < 16; i++) {
+                    masked_dest.s6_addr[i] = dest->s6_addr[i] & mask.s6_addr[i];
+                    masked_network.s6_addr[i] = network_addr->s6_addr[i] & mask.s6_addr[i];
+                }
+                
+                if (memcmp(&masked_dest, &masked_network, sizeof(struct in6_addr)) == 0 &&
+                    route_if_index == if_index) {
+                    reachable = 1;
+                    break;
+                }
             }
         }
     } while (!reachable && nlmsg->nlmsg_type != NLMSG_DONE);
@@ -1172,9 +1197,8 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     close(sock);
 
     if (!reachable) {
-        uct_iface_fill_info_str_buf(
-                    params, "remote IP %s is not reachable through routing",
-                    ucs_sockaddr_str((struct sockaddr *)&sa_remote, ip_str, 32));
+        inet_ntop(family, dest_addr, ip_str, sizeof(ip_str));
+        uct_iface_fill_info_str_buf(params, "remote IP %s is not reachable through routing", ip_str);
     }
 
     return reachable;
