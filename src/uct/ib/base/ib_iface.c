@@ -42,6 +42,13 @@ const char *uct_ib_mtu_values[] = {
     [UCT_IB_MTU_LAST]       = NULL
 };
 
+const char *uct_ib_reachability_mode[] = {
+    [UCT_IB_REACHABILITY_MODE_ROUTE]        = "route",
+    [UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET] = "local_subnet",
+    [UCT_IB_REACHABILITY_MODE_NONE]         = "none",
+    [UCT_IB_REACHABILITY_MODE_LAST]         = NULL
+};
+
 enum {
     UCT_IB_ADDRESS_TYPE_LINK_LOCAL,
     UCT_IB_ADDRESS_TYPE_SITE_LOCAL,
@@ -180,6 +187,13 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "address and a netmask in the form x.x.x.x/y.\n"
    "It must not be used together with UCX_IB_GID_INDEX.",
    ucs_offsetof(uct_ib_iface_config_t, rocev2_subnet_filter), UCS_CONFIG_TYPE_ALLOW_LIST},
+
+  {"ROCE_REACHABILITY_MODE", "route",
+   "The mode used for performing the reachability check\n"
+   " - route        - all routable addresses will be assumed as reachable\n"
+   " - local_subnet - only addresses within the interface's subnet will be assumed as reachable.\n"
+   " - none         - no reachability check will be done. all addresses are reachable",
+   ucs_offsetof(uct_ib_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_mode)},
 
   {"ROCE_PATH_FACTOR", "1",
    "Multiplier for RoCE LAG UDP source port calculation. The UDP source port\n"
@@ -661,6 +675,10 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     char ndev_name[IFNAMSIZ];
     ucs_status_t status;
 
+    if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_NONE) {
+        return 1;
+    }
+
     /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases) */
     if ((uct_ib_address_flags_get_roce_version(remote_ib_addr_flags)) ==
          UCT_IB_DEVICE_ROCE_ANY) {
@@ -716,8 +734,8 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
         return 0;
     }
 
-    if (!uct_iface_is_reachable_by_routing(params, ndev_name, &sa_remote)) {
-        return 0;
+    if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ROUTE) {
+        return uct_iface_is_reachable_by_routing(params, ndev_name, &sa_remote);
     }
 
     /* check for zero-sized netmask */
@@ -1341,9 +1359,18 @@ uct_ib_iface_init_roce_addr_prefix(uct_ib_iface_t *iface,
     ucs_assert(uct_ib_iface_is_roce(iface));
 
     if ((gid_info->roce_info.ver != UCT_IB_DEVICE_ROCE_V2) ||
-        !config->rocev2_local_subnet) {
+        (!config->rocev2_local_subnet &&
+         config->reachability_mode != UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET)) {
         iface->addr_prefix_bits = 0;
         return UCS_OK;
+    }
+
+    /* Override the original value of reachability_mode if
+       rocev2_local_subnet is enabled to maintain backward compatibility */
+    if (config->rocev2_local_subnet) {
+        iface->config.reachability_mode = UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET;
+    } else {
+        iface->config.reachability_mode = config->reachability_mode;
     }
 
     status = ucs_sockaddr_inet_addr_size(gid_info->roce_info.addr_family,
