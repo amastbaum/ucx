@@ -1,3 +1,7 @@
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -9,7 +13,7 @@
 #include <linux/netlink.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
-#include "netlink.h"
+#include <ucs/sys/netlink.h>
 
 
 ucs_status_t netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
