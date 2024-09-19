@@ -206,7 +206,7 @@ libucs_la_SOURCES = \
 	sys/topo/base/topo.c \
 	sys/stubs.c \
 	sys/uid.c \
-	sys/netlink.c \
+	sys/ucs_netlink.c \
 	time/time.c \
 	time/timer_wheel.c \
 	time/timerq.c \

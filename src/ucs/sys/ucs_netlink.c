@@ -2,10 +2,11 @@
 #  include "config.h"
 #endif
 
+#include "ucs_netlink.h"
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <arpa/inet.h>
@@ -13,8 +14,6 @@
 #include <linux/netlink.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
-#include <ucs/sys/netlink.h>
-
 
 ucs_status_t netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
 {
