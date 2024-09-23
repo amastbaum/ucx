@@ -51,12 +51,15 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock)
     }
 }
 
-void ucs_netlink_msg_init(struct netlink_message *msg, int type,
-                          int flags, int nlmsg_len)
+void ucs_netlink_msg_init(struct netlink_message *msg, char *buf,
+                          size_t buf_size, int type, int flags, int nlmsg_len)
 {
     struct nlmsghdr *nlh;
 
-    memset(msg, 0, sizeof(*msg));
+    msg->buf      = buf;
+    msg->buf_size = buf_size;
+    memset(msg->buf, 0, msg->buf_size);
+
     nlh = (struct nlmsghdr *)msg->buf;
     nlh->nlmsg_len = NLMSG_LENGTH(nlmsg_len);
     nlh->nlmsg_type = type;
@@ -80,26 +83,12 @@ ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock,
     return UCS_OK;
 }
 
-static ssize_t peek_nlmsg_size(int sock_fd) {
-    struct msghdr msg = {0};
-    struct iovec iov = {0};
-    char buf[sizeof(struct nlmsghdr)];
-    int flags = MSG_PEEK | MSG_TRUNC;
-
-    iov.iov_base = buf;
-    iov.iov_len = sizeof(buf);
-    msg.msg_iov = &iov;
-    msg.msg_iovlen = 1;
-
-    return recv(sock_fd, &msg, sizeof(buf), flags);
-}
-
 ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
                               struct netlink_message *msg, size_t *len)
 {
-    *len = peek_nlmsg_size(nl_sock->fd);
-    memset(&msg->buf, 0, sizeof(msg->buf));
-    return ucs_socket_recv(nl_sock->fd, &msg->buf, len);
+    *len = msg->buf_size;
+    memset(msg->buf, 0, msg->buf_size);
+    return ucs_socket_recv(nl_sock->fd, msg->buf, len);
 }
 
 ucs_nl_parse_status_t ucs_netlink_parse_msg(

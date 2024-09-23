@@ -83,6 +83,9 @@ static ucs_stats_class_t uct_iface_stats_class = {
 #endif
 
 
+#define ROUTE_BUFFER_SIZE 4096
+
+
 static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
                                               size_t length, unsigned flags)
 {
@@ -1138,6 +1141,7 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     struct rtmsg *rtm;
     ucs_nl_parse_status_t parse_status;
     struct route_info info = {0};
+    char msg_buf[32], recv_msg_buf[ROUTE_BUFFER_SIZE];
 
     info.if_index = if_nametoindex(iface);
     if (info.if_index == 0) {
@@ -1161,9 +1165,8 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
         return 0;
     }
 
-    ucs_netlink_msg_init(&msg, RTM_GETROUTE,
-                         NLM_F_REQUEST | NLM_F_DUMP,
-                         sizeof(struct rtmsg));
+    ucs_netlink_msg_init(&msg, msg_buf, sizeof(msg_buf), RTM_GETROUTE,
+                         NLM_F_REQUEST | NLM_F_DUMP, sizeof(struct rtmsg));
 
     rtm = (struct rtmsg *)NLMSG_DATA(&msg.buf);
     rtm->rtm_family = info.family;
@@ -1175,6 +1178,10 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
                                     "failed to send route netlink message");
         goto out;
     }
+
+    ucs_netlink_msg_init(&recv_msg, recv_msg_buf, sizeof(recv_msg_buf),
+                         RTM_GETROUTE, NLM_F_REQUEST | NLM_F_DUMP,
+                         sizeof(struct rtmsg));
 
     if (ucs_netlink_recv(&nl_sock, &recv_msg, &msg_len) != UCS_OK) {
         uct_iface_fill_info_str_buf(params,
