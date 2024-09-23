@@ -590,20 +590,31 @@ ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
 }
 
 static inline ucs_status_t
-ucs_socket_do_io_b(int fd, void *data, size_t length,
+ucs_socket_do_io_b(int fd, void *data, size_t *length,
                    ucs_socket_io_func_t io_func, const char *name)
 {
-    size_t done_cnt = 0, cur_cnt = length;
+    size_t done_cnt = 0, cur_cnt = *length;
     ucs_status_t status;
+    int type;
+
+    status = ucs_socket_getopt(fd, SOL_SOCKET, SO_TYPE, (void*)&type, sizeof(type));
+    if (status != UCS_OK) {
+        return UCS_ERR_IO_ERROR;
+    }
 
     do {
         status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
         done_cnt += cur_cnt;
-        ucs_assert(done_cnt <= length);
-        cur_cnt = length - done_cnt;
-    } while ((done_cnt < length) &&
+        ucs_assert(done_cnt <= *length);
+        if (cur_cnt > 0 && (type == SOCK_DGRAM || type == SOCK_RAW)) {
+            break;
+        }
+
+        cur_cnt = *length - done_cnt;
+    } while ((done_cnt < *length) &&
              ((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS)));
 
+    *length = done_cnt;
     return status;
 }
 
@@ -641,11 +652,12 @@ ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p)
 
 ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)
 {
-    return ucs_socket_do_io_b(fd, (void*)data, length,
+    size_t length_cpy = length;
+    return ucs_socket_do_io_b(fd, (void*)data, &length_cpy,
                               (ucs_socket_io_func_t)send, "send");
 }
 
-ucs_status_t ucs_socket_recv(int fd, void *data, size_t length)
+ucs_status_t ucs_socket_recv(int fd, void *data, size_t *length)
 {
     return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io, "recv");
 }

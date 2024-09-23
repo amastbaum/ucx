@@ -99,7 +99,7 @@ ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
 {
     *len = peek_nlmsg_size(nl_sock->fd);
     memset(&msg->buf, 0, sizeof(msg->buf));
-    return ucs_socket_recv(nl_sock->fd, &msg->buf, *len);
+    return ucs_socket_recv(nl_sock->fd, &msg->buf, len);
 }
 
 ucs_nl_parse_status_t ucs_netlink_parse_msg(
