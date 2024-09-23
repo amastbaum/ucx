@@ -1,27 +1,31 @@
+/**
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024. ALL RIGHTS RESERVED.
+*
+* See file LICENSE for terms.
+*/
+
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
 
 #include "ucs_netlink.h"
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
 #include <errno.h>
-#include <arpa/inet.h>
-#include <net/if.h>
 #include <linux/netlink.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <ucs/sys/sock.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
 
-ucs_status_t netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
+ucs_status_t ucs_netlink_socket_create(struct netlink_socket *nl_sock,
+                                       int protocol)
 {
     int fd;
+    ucs_status_t ret;
 
-    fd = socket(AF_NETLINK, SOCK_RAW, protocol);
-    if (fd < 0) {
-        ucs_diag("failed to create a socket\n");
+    ret = ucs_socket_create(AF_NETLINK, SOCK_RAW, protocol, &fd);
+    if (ret != UCS_OK) {
         return UCS_ERR_IO_ERROR;
     }
 
@@ -31,7 +35,7 @@ ucs_status_t netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
 
     if (bind(fd, (struct sockaddr *)&nl_sock->local,
              sizeof(nl_sock->local)) < 0) {
-        close(fd);
+        ucs_close_fd(&fd);
         ucs_diag("failed to bind netlink socket %d\n", fd);
         return UCS_ERR_IO_ERROR;
     }
@@ -39,16 +43,16 @@ ucs_status_t netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
     return UCS_OK;
 }
 
-void netlink_socket_close(struct netlink_socket *nl_sock)
+void ucs_netlink_socket_close(struct netlink_socket *nl_sock)
 {
     if (nl_sock->fd >= 0) {
-        close(nl_sock->fd);
+        ucs_close_fd(&nl_sock->fd);
         nl_sock->fd = -1;
     }
 }
 
-void netlink_msg_init(struct netlink_message *msg, int type,
-                      int flags, int nlmsg_len)
+void ucs_netlink_msg_init(struct netlink_message *msg, int type,
+                          int flags, int nlmsg_len)
 {
     struct nlmsghdr *nlh;
 
@@ -61,40 +65,45 @@ void netlink_msg_init(struct netlink_message *msg, int type,
     nlh->nlmsg_pid = getpid();
 }
 
-ucs_status_t netlink_send(struct netlink_socket *nl_sock,
-                          struct netlink_message *msg)
+ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock,
+                              struct netlink_message *msg)
 {
     struct nlmsghdr *nlh = (struct nlmsghdr *)msg->buf;
 
     /* send the request */
-    if (send(nl_sock->fd, nlh, nlh->nlmsg_len, 0) < 0) {
+    if (ucs_socket_send(nl_sock->fd, nlh, nlh->nlmsg_len) < 0) {
         ucs_diag("failed to send netlink message\n");
-        close(nl_sock->fd);
+        ucs_close_fd(&nl_sock->fd);
         return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
 }
 
-int netlink_recv(struct netlink_socket *nl_sock, struct netlink_message *msg)
-{
-    int ret;
+static ssize_t peek_nlmsg_size(int sock_fd) {
+    struct msghdr msg = {0};
+    struct iovec iov = {0};
+    char buf[sizeof(struct nlmsghdr)];
+    int flags = MSG_PEEK | MSG_TRUNC;
 
-    memset(&msg->buf, 0, sizeof(msg->buf));
-    ret = recv(nl_sock->fd, &msg->buf, sizeof(msg->buf), 0);
-    if (ret < 0) {
-        return -errno;
-    }
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
 
-    if (ret == 0) {
-        return -ENODATA;
-    }
-
-    return ret;
+    return recv(sock_fd, &msg, sizeof(buf), flags);
 }
 
-ucs_nl_parse_status_t netlink_parse_msg(
-                            struct netlink_message *msg, int msg_len,
+ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
+                              struct netlink_message *msg, size_t *len)
+{
+    *len = peek_nlmsg_size(nl_sock->fd);
+    memset(&msg->buf, 0, sizeof(msg->buf));
+    return ucs_socket_recv(nl_sock->fd, &msg->buf, *len);
+}
+
+ucs_nl_parse_status_t ucs_netlink_parse_msg(
+                            struct netlink_message *msg, size_t msg_len,
                             void (*parse_cb)(struct nlmsghdr *h, void *arg),
                             void *arg)
 {

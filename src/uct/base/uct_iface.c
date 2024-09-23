@@ -18,7 +18,6 @@
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/sock.h>
 #include <ucs/sys/ucs_netlink.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/debug_int.h>
@@ -1132,7 +1131,8 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
                                       const char *iface,
                                       struct sockaddr_storage *sa_remote)
 {
-    int ret, len;
+    ucs_status_t ret;
+    size_t msg_len;
     struct netlink_socket nl_sock;
     struct netlink_message msg, recv_msg;
     struct rtmsg *rtm;
@@ -1155,38 +1155,41 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
         return 0;
     }
 
-    ret = netlink_socket_create(&nl_sock, NETLINK_ROUTE);
+    ret = ucs_netlink_socket_create(&nl_sock, NETLINK_ROUTE);
     if (ret != UCS_OK) {
         uct_iface_fill_info_str_buf(params, "failed to open netlink socket");
         return 0;
     }
 
-    netlink_msg_init(&msg, RTM_GETROUTE,
-                     NLM_F_REQUEST | NLM_F_DUMP,
-                     sizeof(struct rtmsg));
+    ucs_netlink_msg_init(&msg, RTM_GETROUTE,
+                         NLM_F_REQUEST | NLM_F_DUMP,
+                         sizeof(struct rtmsg));
 
     rtm = (struct rtmsg *)NLMSG_DATA(&msg.buf);
     rtm->rtm_family = info.family;
     rtm->rtm_table = RT_TABLE_MAIN;
 
-    ret = netlink_send(&nl_sock, &msg);
-    if (ret < 0) {
+    ret = ucs_netlink_send(&nl_sock, &msg);
+    if (ret != UCS_OK) {
         uct_iface_fill_info_str_buf(params,
                                     "failed to send route netlink message");
         goto out;
     }
 
-    while ((len = netlink_recv(&nl_sock, &recv_msg)) > 0) {
-        parse_status = netlink_parse_msg(&recv_msg, len, parse_nl_route_cb, &info);
-        if (parse_status == UCS_NL_STATUS_DONE ||
-            parse_status == UCS_NL_STATUS_ERROR ||
-            info.reachable) {
-            break;
-        }
+    if (ucs_netlink_recv(&nl_sock, &recv_msg, &msg_len) != UCS_OK) {
+        uct_iface_fill_info_str_buf(params,
+                                    "failed to receive route netlink message");
+        goto out;
+    }
+
+    parse_status = ucs_netlink_parse_msg(&recv_msg, msg_len,
+                                         parse_nl_route_cb, &info);
+    if (parse_status == UCS_NL_STATUS_ERROR) {
+        info.reachable = 0;
     }
 
 out:
-    netlink_socket_close(&nl_sock);
+    ucs_netlink_socket_close(&nl_sock);
     return info.reachable;
 }
 
