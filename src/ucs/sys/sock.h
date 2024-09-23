@@ -330,10 +330,11 @@ ucs_status_t ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt,
  *                                  data.
  * @param [in/out]  length          The length, in bytes, of the data in buffer
  *                                  pointed to by the `data` parameter.
+ * @param [in]      flags           Receive flags.
  *
  * @return UCS_OK on success or an error code on failure.
  */
-ucs_status_t ucs_socket_recv(int fd, void *data, size_t *length);
+ucs_status_t ucs_socket_recv(int fd, void *data, size_t *length, int flags);
 
 
 /**
