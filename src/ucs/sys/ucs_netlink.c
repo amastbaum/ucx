@@ -22,6 +22,7 @@ ucs_status_t ucs_netlink_socket_create(struct netlink_socket *nl_sock,
                                        int protocol)
 {
     int fd;
+    struct sockaddr_nl sa;
     ucs_status_t ret;
 
     ret = ucs_socket_create(AF_NETLINK, SOCK_RAW, protocol, &fd);
@@ -31,10 +32,9 @@ ucs_status_t ucs_netlink_socket_create(struct netlink_socket *nl_sock,
 
     memset(nl_sock, 0, sizeof(*nl_sock));
     nl_sock->fd = fd;
-    nl_sock->local.nl_family = AF_NETLINK;
+    sa.nl_family = AF_NETLINK;
 
-    if (bind(fd, (struct sockaddr *)&nl_sock->local,
-             sizeof(nl_sock->local)) < 0) {
+    if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
         ucs_close_fd(&fd);
         ucs_diag("failed to bind netlink socket %d\n", fd);
         return UCS_ERR_IO_ERROR;

@@ -15,8 +15,6 @@ typedef enum ucs_nl_parse_status {
 
 struct netlink_socket {
     int fd;
-    struct sockaddr_nl local;
-    struct sockaddr_nl peer;
 };
 
 struct netlink_message {
