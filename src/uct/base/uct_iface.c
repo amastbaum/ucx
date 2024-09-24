@@ -1168,7 +1168,7 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     ucs_netlink_msg_init(&msg, msg_buf, sizeof(msg_buf), RTM_GETROUTE,
                          NLM_F_REQUEST | NLM_F_DUMP, sizeof(struct rtmsg));
 
-    rtm = (struct rtmsg *)NLMSG_DATA(&msg.buf);
+    rtm = (struct rtmsg *)NLMSG_DATA(msg.buf);
     rtm->rtm_family = info.family;
     rtm->rtm_table = RT_TABLE_MAIN;
 
