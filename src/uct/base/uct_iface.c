@@ -1137,11 +1137,11 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     ucs_status_t ret;
     size_t msg_len;
     struct netlink_socket nl_sock;
-    struct netlink_message msg, recv_msg;
     struct rtmsg *rtm;
     ucs_nl_parse_status_t parse_status;
+    struct netlink_message msg, recv_msg = INIT_MSG;
     struct route_info info = {0};
-    char msg_buf[32], recv_msg_buf[ROUTE_BUFFER_SIZE];
+    char msg_buf[32];
 
     info.if_index = if_nametoindex(iface);
     if (info.if_index == 0) {
@@ -1179,10 +1179,6 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
         goto out;
     }
 
-    ucs_netlink_msg_init(&recv_msg, recv_msg_buf, sizeof(recv_msg_buf),
-                         RTM_GETROUTE, NLM_F_REQUEST | NLM_F_DUMP,
-                         sizeof(struct rtmsg));
-
     if (ucs_netlink_recv(&nl_sock, &recv_msg, &msg_len) != UCS_OK) {
         uct_iface_fill_info_str_buf(params,
                                     "failed to receive route netlink message");
@@ -1196,6 +1192,7 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     }
 
 out:
+    ucs_netlink_msg_destroy(&recv_msg);
     ucs_netlink_socket_close(&nl_sock);
     return info.reachable;
 }

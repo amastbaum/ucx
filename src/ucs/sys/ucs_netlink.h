@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <linux/netlink.h>
 
+#define INIT_MSG {.buf = NULL, .buf_size = 0}
+
 typedef enum ucs_nl_parse_status {
     UCS_NL_STATUS_OK = 0,
     UCS_NL_STATUS_DONE = 1,
@@ -28,6 +30,7 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock);
 // Message Construction
 void ucs_netlink_msg_init(struct netlink_message *msg, char *buf,
                           size_t buf_size, int type, int flags, int nlmsg_len);
+void ucs_netlink_msg_destroy(struct netlink_message *msg);
 
 // Message Sending and Receiving
 ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock,

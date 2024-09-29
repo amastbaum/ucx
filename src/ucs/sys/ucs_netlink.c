@@ -17,6 +17,7 @@
 #include <ucs/sys/sock.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack_int.h>
 
 ucs_status_t ucs_netlink_socket_create(struct netlink_socket *nl_sock,
                                        int protocol)
@@ -61,11 +62,11 @@ void ucs_netlink_msg_init(struct netlink_message *msg, char *buf,
     memset(msg->buf, 0, msg->buf_size);
 
     nlh = (struct nlmsghdr *)msg->buf;
-    nlh->nlmsg_len = NLMSG_LENGTH(nlmsg_len);
-    nlh->nlmsg_type = type;
+    nlh->nlmsg_len   = NLMSG_LENGTH(nlmsg_len);
+    nlh->nlmsg_type  = type;
     nlh->nlmsg_flags = flags;
-    nlh->nlmsg_seq = 1;
-    nlh->nlmsg_pid = getpid();
+    nlh->nlmsg_seq   = 1;
+    nlh->nlmsg_pid   = getpid();
 }
 
 ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock,
@@ -98,11 +99,24 @@ static ssize_t peek_nlmsg_size(int sock_fd) {
     return len;
 }
 
+void ucs_netlink_msg_destroy(struct netlink_message *msg) {
+    if (msg->buf != NULL) {
+        ucs_free(msg->buf);
+        msg->buf = NULL;
+        msg->buf_size = 0;
+    }
+}
+
 ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
                               struct netlink_message *msg, size_t *len)
 {
     *len = peek_nlmsg_size(nl_sock->fd);
-    memset(msg->buf, 0, sizeof(msg->buf_size));
+    msg->buf_size = *len;
+    msg->buf = ucs_malloc(msg->buf_size, "netlink recv message");
+    if (msg->buf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
     return ucs_socket_recv(nl_sock->fd, msg->buf, len, 0);
 }
 
