@@ -52,21 +52,26 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock)
     }
 }
 
-void ucs_netlink_msg_init(struct netlink_message *msg, char *buf,
-                          size_t buf_size, int type, int flags, int nlmsg_len)
+ucs_status_t ucs_netlink_send_msg_create(struct netlink_message *msg, int type,
+                                         int flags, int nlmsg_len)
 {
     struct nlmsghdr *nlh;
 
-    msg->buf      = buf;
-    msg->buf_size = buf_size;
-    memset(msg->buf, 0, msg->buf_size);
+    msg->buf_size = sizeof(struct nlmsghdr) + nlmsg_len;
+    msg->buf      = malloc(msg->buf_size);
+    if (msg->buf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
 
+    memset(msg->buf, 0, msg->buf_size);
     nlh = (struct nlmsghdr *)msg->buf;
     nlh->nlmsg_len   = NLMSG_LENGTH(nlmsg_len);
     nlh->nlmsg_type  = type;
     nlh->nlmsg_flags = flags;
     nlh->nlmsg_seq   = 1;
     nlh->nlmsg_pid   = getpid();
+
+    return UCS_OK;
 }
 
 ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock,
