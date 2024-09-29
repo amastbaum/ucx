@@ -611,8 +611,11 @@ ucs_socket_do_io_b(int fd, void *data, size_t *length,
     do {
         status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name, flags);
         done_cnt += cur_cnt;
-        ucs_assert(done_cnt <= *length);
-        if (cur_cnt > 0 && (type == SOCK_DGRAM || type == SOCK_RAW)) {
+        if ((flags & MSG_TRUNC) == 0) {
+            ucs_assert(done_cnt <= *length);
+        }
+
+        if ((type == SOCK_DGRAM || type == SOCK_RAW) && cur_cnt > 0) {
             break;
         }
 

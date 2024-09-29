@@ -83,28 +83,18 @@ ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock,
     return UCS_OK;
 }
 
-<<<<<<< HEAD
-ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
-                              struct netlink_message *msg, size_t *len)
-{
-    *len = msg->buf_size;
-    memset(msg->buf, 0, msg->buf_size);
-    return ucs_socket_recv(nl_sock->fd, msg->buf, len);
-=======
 static ssize_t peek_nlmsg_size(int sock_fd) {
-    struct msghdr msg = {0};
-    struct iovec iov = {0};
-    ssize_t len;
-    char buf[sizeof(struct msghdr)];
+    struct nlmsghdr msg = {0};
+    ucs_status_t ret;
+    char buf[sizeof(struct nlmsghdr)];
+    ssize_t len = sizeof(buf);
 
-    iov.iov_base = buf;
-    iov.iov_len = sizeof(buf);
-    msg.msg_iov = &iov;
-    msg.msg_iovlen = 1;
+    ret = ucs_socket_recv(sock_fd, &msg, &len, MSG_PEEK | MSG_TRUNC);
+    if (ret < 0) {
+        len = ret;
+        ucs_diag("failed to read from netlink socket %d\n", sock_fd);
+    }
 
-    printf("calling recv(..., PEEK) with length %ld\n", sizeof(struct msghdr));
-    len = recv(sock_fd, &msg, sizeof(struct msghdr), MSG_PEEK | MSG_TRUNC);
-    printf("recv(..., PEEK) returned %ld\n", len);
     return len;
 }
 
@@ -112,9 +102,8 @@ ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
                               struct netlink_message *msg, size_t *len)
 {
     *len = peek_nlmsg_size(nl_sock->fd);
-    memset(&msg->buf, 0, sizeof(msg->buf));
-    return ucs_socket_recv(nl_sock->fd, &msg->buf, len, 0);
->>>>>>> 5c9a286ec (Add 'flags' to PEEK - Not working yet)
+    memset(msg->buf, 0, sizeof(msg->buf_size));
+    return ucs_socket_recv(nl_sock->fd, msg->buf, len, 0);
 }
 
 ucs_nl_parse_status_t ucs_netlink_parse_msg(
