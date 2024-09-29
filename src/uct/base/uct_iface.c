@@ -1043,7 +1043,7 @@ struct route_info {
     int family;
 
     union {
-        struct in_addr ipv4;
+        struct in_addr  ipv4;
         struct in6_addr ipv6;
     } remote_addr;
 
@@ -1052,9 +1052,9 @@ struct route_info {
 };
 
 static int netlink_parse_rtattr(struct rtattr *attrs[], int max,
-                         struct rtattr *rta, int len)
+                                struct rtattr *rta, int len)
 {
-    memset(attrs, 0, sizeof(struct rtattr *) * (max + 1));
+    memset(attrs, 0, sizeof(struct rtattr*) * (max + 1));
 
     for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
         if (rta->rta_type <= max) {
@@ -1071,10 +1071,10 @@ static void create_ipv6_mask(struct in6_addr *mask, int prefix_len)
     for (i = 0; i < 16; i++) {
         if (prefix_len >= 8) {
             mask->s6_addr[i] = 0xFF;
-            prefix_len -= 8;
+            prefix_len      -= 8;
         } else if (prefix_len > 0) {
             mask->s6_addr[i] = (0xFF00 >> prefix_len) & 0xFF;
-            prefix_len = 0;
+            prefix_len       = 0;
         } else {
             mask->s6_addr[i] = 0;
         }
@@ -1083,8 +1083,8 @@ static void create_ipv6_mask(struct in6_addr *mask, int prefix_len)
 
 static void parse_nl_route_cb(struct nlmsghdr *nlh, void *arg)
 {
-    struct route_info *info = (struct route_info *)arg;
-    struct rtmsg *rtm = NLMSG_DATA(nlh);
+    struct route_info *info = (struct route_info*)arg;
+    struct rtmsg *rtm       = NLMSG_DATA(nlh);
     struct rtattr *rta[RTA_MAX + 1];
     int *oif;
 
@@ -1106,22 +1106,25 @@ static void parse_nl_route_cb(struct nlmsghdr *nlh, void *arg)
         if (info->family == AF_INET) {
             struct in_addr *addr = RTA_DATA(rta[RTA_DST]);
             uint32_t mask = htonl(~((1 << (32 - rtm->rtm_dst_len)) - 1));
-            if ((info->remote_addr.ipv4.s_addr & mask) == (addr->s_addr & mask)) {
-                    info->reachable = 1;
+            if ((info->remote_addr.ipv4.s_addr & mask) ==
+                (addr->s_addr & mask)) {
+                info->reachable = 1;
             }
         } else { /* AF_INET6 */
             int i;
             struct in6_addr *network_addr = RTA_DATA(rta[RTA_DST]);
-            struct in6_addr *dest = (struct in6_addr *)&info->remote_addr.ipv6;
+            struct in6_addr *dest = (struct in6_addr*)&info->remote_addr.ipv6;
             struct in6_addr mask, masked_dest, masked_network;
             create_ipv6_mask(&mask, rtm->rtm_dst_len);
 
             for (i = 0; i < 16; i++) {
-                masked_dest.s6_addr[i] = dest->s6_addr[i] & mask.s6_addr[i];
-                masked_network.s6_addr[i] = network_addr->s6_addr[i] & mask.s6_addr[i];
+                masked_dest.s6_addr[i]    = dest->s6_addr[i] & mask.s6_addr[i];
+                masked_network.s6_addr[i] = network_addr->s6_addr[i] &
+                                            mask.s6_addr[i];
             }
 
-            if (memcmp(&masked_dest, &masked_network, sizeof(struct in6_addr)) == 0) {
+            if (memcmp(&masked_dest, &masked_network,
+                       sizeof(struct in6_addr)) == 0) {
                 info->reachable = 1;
             }
         }
@@ -1130,16 +1133,16 @@ static void parse_nl_route_cb(struct nlmsghdr *nlh, void *arg)
     info->prefix_len = rtm->rtm_dst_len;
 }
 
-int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *params,
-                                      const char *iface,
-                                      struct sockaddr_storage *sa_remote)
+int uct_iface_is_reachable_by_routing(
+        const uct_iface_is_reachable_params_t *params, const char *iface,
+        struct sockaddr_storage *sa_remote)
 {
     ucs_status_t ret;
     size_t msg_len;
     struct netlink_socket nl_sock;
     struct rtmsg *rtm;
     ucs_nl_parse_status_t parse_status;
-    struct route_info info = {0};
+    struct route_info info     = {0};
     struct netlink_message msg = {0}, recv_msg = {0};
 
     info.if_index = if_nametoindex(iface);
@@ -1150,9 +1153,9 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
 
     info.family = sa_remote->ss_family;
     if (info.family == AF_INET) {
-        info.remote_addr.ipv4 = ((struct sockaddr_in *)sa_remote)->sin_addr;
+        info.remote_addr.ipv4 = ((struct sockaddr_in*)sa_remote)->sin_addr;
     } else if (info.family == AF_INET6) {
-        info.remote_addr.ipv6 = ((struct sockaddr_in6 *)sa_remote)->sin6_addr;
+        info.remote_addr.ipv6 = ((struct sockaddr_in6*)sa_remote)->sin6_addr;
     } else {
         uct_iface_fill_info_str_buf(params, "unsupported address family");
         return 0;
@@ -1167,9 +1170,9 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
     ucs_netlink_msg_init(&msg, RTM_GETROUTE, NLM_F_REQUEST | NLM_F_DUMP,
                          sizeof(struct rtmsg));
 
-    rtm = (struct rtmsg *)NLMSG_DATA(msg.buf);
+    rtm             = (struct rtmsg*)NLMSG_DATA(msg.buf);
     rtm->rtm_family = info.family;
-    rtm->rtm_table = RT_TABLE_MAIN;
+    rtm->rtm_table  = RT_TABLE_MAIN;
 
     ret = ucs_netlink_send(&nl_sock, &msg);
     if (ret != UCS_OK) {
@@ -1184,8 +1187,8 @@ int uct_iface_is_reachable_by_routing(const uct_iface_is_reachable_params_t *par
         goto out;
     }
 
-    parse_status = ucs_netlink_parse_msg(&recv_msg, msg_len,
-                                         parse_nl_route_cb, &info);
+    parse_status = ucs_netlink_parse_msg(&recv_msg, msg_len, parse_nl_route_cb,
+                                         &info);
     if (parse_status == UCS_NL_STATUS_ERROR) {
         info.reachable = 0;
     }

@@ -5,7 +5,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
 #include "ucs_netlink.h"
@@ -19,8 +19,8 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 
-ucs_status_t ucs_netlink_socket_create(struct netlink_socket *nl_sock,
-                                       int protocol)
+ucs_status_t
+ucs_netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
 {
     int fd;
     struct sockaddr_nl sa;
@@ -32,10 +32,10 @@ ucs_status_t ucs_netlink_socket_create(struct netlink_socket *nl_sock,
     }
 
     memset(nl_sock, 0, sizeof(*nl_sock));
-    nl_sock->fd = fd;
+    nl_sock->fd  = fd;
     sa.nl_family = AF_NETLINK;
 
-    if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+    if (bind(fd, (struct sockaddr*)&sa, sizeof(sa)) < 0) {
         ucs_close_fd(&fd);
         ucs_diag("failed to bind netlink socket %d\n", fd);
         return UCS_ERR_IO_ERROR;
@@ -64,7 +64,7 @@ ucs_status_t ucs_netlink_send_msg_create(struct netlink_message *msg, int type,
     }
 
     memset(msg->buf, 0, msg->buf_size);
-    nlh = (struct nlmsghdr *)msg->buf;
+    nlh              = (struct nlmsghdr*)msg->buf;
     nlh->nlmsg_len   = NLMSG_LENGTH(nlmsg_len);
     nlh->nlmsg_type  = type;
     nlh->nlmsg_flags = flags;
@@ -74,10 +74,10 @@ ucs_status_t ucs_netlink_send_msg_create(struct netlink_message *msg, int type,
     return UCS_OK;
 }
 
-ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock,
-                              struct netlink_message *msg)
+ucs_status_t
+ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg)
 {
-    struct nlmsghdr *nlh = (struct nlmsghdr *)msg->buf;
+    struct nlmsghdr *nlh = (struct nlmsghdr*)msg->buf;
 
     /* send the request */
     if (ucs_socket_send(nl_sock->fd, nlh, nlh->nlmsg_len) < 0) {
@@ -89,7 +89,8 @@ ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock,
     return UCS_OK;
 }
 
-static ssize_t peek_nlmsg_size(int sock_fd) {
+static ssize_t peek_nlmsg_size(int sock_fd)
+{
     struct nlmsghdr msg = {0};
     ucs_status_t ret;
     char buf[sizeof(struct nlmsghdr)];
@@ -104,10 +105,11 @@ static ssize_t peek_nlmsg_size(int sock_fd) {
     return len;
 }
 
-void ucs_netlink_msg_destroy(struct netlink_message *msg) {
+void ucs_netlink_msg_destroy(struct netlink_message *msg)
+{
     if (msg->buf != NULL) {
         ucs_free(msg->buf);
-        msg->buf = NULL;
+        msg->buf      = NULL;
         msg->buf_size = 0;
     }
 }
@@ -115,9 +117,9 @@ void ucs_netlink_msg_destroy(struct netlink_message *msg) {
 ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
                               struct netlink_message *msg, size_t *len)
 {
-    *len = peek_nlmsg_size(nl_sock->fd);
+    *len          = peek_nlmsg_size(nl_sock->fd);
     msg->buf_size = *len;
-    msg->buf = ucs_malloc(msg->buf_size, "netlink recv message");
+    msg->buf      = ucs_malloc(msg->buf_size, "netlink recv message");
     if (msg->buf == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -125,21 +127,21 @@ ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
     return ucs_socket_recv(nl_sock->fd, msg->buf, len, 0);
 }
 
-ucs_nl_parse_status_t ucs_netlink_parse_msg(
-                            struct netlink_message *msg, size_t msg_len,
-                            void (*parse_cb)(struct nlmsghdr *h, void *arg),
-                            void *arg)
+ucs_nl_parse_status_t
+ucs_netlink_parse_msg(struct netlink_message *msg, size_t msg_len,
+                      void (*parse_cb)(struct nlmsghdr *h, void *arg),
+                      void *arg)
 {
     struct nlmsghdr *nlh;
 
-    for (nlh = (struct nlmsghdr *)msg->buf; NLMSG_OK(nlh, msg_len);
+    for (nlh = (struct nlmsghdr*)msg->buf; NLMSG_OK(nlh, msg_len);
          nlh = NLMSG_NEXT(nlh, msg_len)) {
         if (nlh->nlmsg_type == NLMSG_DONE) {
             return UCS_NL_STATUS_DONE;
         }
 
         if (nlh->nlmsg_type == NLMSG_ERROR) {
-            struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
+            struct nlmsgerr *err = (struct nlmsgerr*)NLMSG_DATA(nlh);
             ucs_diag("failed to parse netlink message header (%d)", err->error);
             return UCS_NL_STATUS_ERROR;
         }

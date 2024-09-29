@@ -603,7 +603,8 @@ ucs_socket_do_io_b(int fd, void *data, size_t *length,
     ucs_status_t status;
     int type;
 
-    status = ucs_socket_getopt(fd, SOL_SOCKET, SO_TYPE, (void*)&type, sizeof(type));
+    status = ucs_socket_getopt(fd, SOL_SOCKET, SO_TYPE, (void*)&type,
+                               sizeof(type));
     if (status != UCS_OK) {
         return UCS_ERR_IO_ERROR;
     }
@@ -656,7 +657,8 @@ static ssize_t ucs_socket_recv_io(int fd, void *data, size_t size, int flags)
 
 ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p)
 {
-    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io, "recv", 0);
+    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io, "recv",
+                               0);
 }
 
 ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)
@@ -668,8 +670,8 @@ ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)
 
 ucs_status_t ucs_socket_recv(int fd, void *data, size_t *length, int flags)
 {
-    return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io,
-                              "recv", flags);
+    return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io, "recv",
+                              flags);
 }
 
 ucs_status_t
