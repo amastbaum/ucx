@@ -1167,8 +1167,8 @@ int uct_iface_is_reachable_by_routing(
         return 0;
     }
 
-    ucs_netlink_msg_init(&msg, RTM_GETROUTE, NLM_F_REQUEST | NLM_F_DUMP,
-                         sizeof(struct rtmsg));
+    ucs_netlink_send_msg_create(&msg, RTM_GETROUTE, NLM_F_REQUEST | NLM_F_DUMP,
+                                sizeof(struct rtmsg));
 
     rtm             = (struct rtmsg*)NLMSG_DATA(msg.buf);
     rtm->rtm_family = info.family;
