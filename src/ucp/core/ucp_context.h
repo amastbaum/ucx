@@ -78,12 +78,14 @@ typedef struct ucp_context_config {
     size_t                                 rndv_frag_size[UCS_MEMORY_TYPE_LAST];
     /** Number of RNDV pipeline fragments per allocation */
     size_t                                 rndv_num_frags[UCS_MEMORY_TYPE_LAST];
-    /** Memory type of fragments used for RNDV pipeline protocol */
-    ucs_memory_type_t                      rndv_frag_mem_type;
+    /** Memory types of fragments used for RNDV pipeline protocol */
+    uint64_t                               rndv_frag_mem_types;
     /** RNDV pipeline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Enabling 2-stage pipeline rndv protocol */
     int                                    rndv_shm_ppln_enable;
+    /** Enable error handling for rndv pipeline protocol */
+    int                                    rndv_errh_ppln_enable;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
