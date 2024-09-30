@@ -28,7 +28,7 @@ ucs_netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
 
     ret = ucs_socket_create(AF_NETLINK, SOCK_RAW, protocol, &fd);
     if (ret != UCS_OK) {
-        return UCS_ERR_IO_ERROR;
+        return ret;
     }
 
     memset(nl_sock, 0, sizeof(*nl_sock));
@@ -37,7 +37,7 @@ ucs_netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
 
     if (bind(fd, (struct sockaddr*)&sa, sizeof(sa)) < 0) {
         ucs_close_fd(&fd);
-        ucs_diag("failed to bind netlink socket %d\n", fd);
+        ucs_diag("failed to bind netlink socket %d", fd);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -58,7 +58,7 @@ ucs_status_t ucs_netlink_send_msg_create(struct netlink_message *msg, int type,
     struct nlmsghdr *nlh;
 
     msg->buf_size = sizeof(struct nlmsghdr) + nlmsg_len;
-    msg->buf      = malloc(msg->buf_size);
+    msg->buf      = ucs_malloc(msg->buf_size, "Netlink send message");
     if (msg->buf == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -78,10 +78,9 @@ ucs_status_t
 ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg)
 {
     struct nlmsghdr *nlh = (struct nlmsghdr*)msg->buf;
-
-    /* send the request */
-    if (ucs_socket_send(nl_sock->fd, nlh, nlh->nlmsg_len) < 0) {
-        ucs_diag("failed to send netlink message\n");
+    ucs_status_t ret = ucs_socket_send(nl_sock->fd, nlh, nlh->nlmsg_len);
+    if (ret < 0) {
+        ucs_diag("failed to send netlink message. returned %d", ret);
         ucs_close_fd(&nl_sock->fd);
         return UCS_ERR_IO_ERROR;
     }
@@ -97,7 +96,7 @@ static ucs_status_t peek_nlmsg_size(int sock_fd, size_t *len)
 
     ret = ucs_socket_recv(sock_fd, &msg, len, MSG_PEEK | MSG_TRUNC);
     if (ret != UCS_OK) {
-        ucs_diag("failed to read from netlink socket %d. returned %d\n",
+        ucs_diag("failed to read from netlink socket %d. returned %d",
                  sock_fd, ret);
     }
 

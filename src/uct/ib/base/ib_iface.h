@@ -111,7 +111,7 @@ enum {
 /**
  * Reachability mode.
  */
-typedef enum uct_ib_reachability_mode {
+typedef enum {
     UCT_IB_REACHABILITY_MODE_ROUTE        = 0,
     UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET = 1,
     UCT_IB_REACHABILITY_MODE_NONE         = 2,

@@ -1065,7 +1065,7 @@ static int netlink_parse_rtattr(struct rtattr *attrs[], int max,
     return 0;
 }
 
-static void create_ipv6_mask(struct in6_addr *mask, int prefix_len)
+static void create_ipv6_mask(struct in6_addr *mask, unsigned char prefix_len)
 {
     int i;
     for (i = 0; i < 16; i++) {
