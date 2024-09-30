@@ -89,20 +89,19 @@ ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg)
     return UCS_OK;
 }
 
-static ssize_t peek_nlmsg_size(int sock_fd)
+static ucs_status_t peek_nlmsg_size(int sock_fd, size_t *len)
 {
-    struct nlmsghdr msg = {0};
     ucs_status_t ret;
-    char buf[sizeof(struct nlmsghdr)];
-    ssize_t len = sizeof(buf);
+    struct nlmsghdr msg = {0};
+    *len = sizeof(msg);
 
-    ret = ucs_socket_recv(sock_fd, &msg, &len, MSG_PEEK | MSG_TRUNC);
-    if (ret < 0) {
-        len = ret;
-        ucs_diag("failed to read from netlink socket %d\n", sock_fd);
+    ret = ucs_socket_recv(sock_fd, &msg, len, MSG_PEEK | MSG_TRUNC);
+    if (ret != UCS_OK) {
+        ucs_diag("failed to read from netlink socket %d. returned %d\n",
+                 sock_fd, ret);
     }
 
-    return len;
+    return ret;
 }
 
 void ucs_netlink_msg_destroy(struct netlink_message *msg)
@@ -117,7 +116,10 @@ void ucs_netlink_msg_destroy(struct netlink_message *msg)
 ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
                               struct netlink_message *msg, size_t *len)
 {
-    *len          = peek_nlmsg_size(nl_sock->fd);
+    if (peek_nlmsg_size(nl_sock->fd, len) != UCS_OK) {
+        return UCS_ERR_IO_ERROR;
+    }
+
     msg->buf_size = *len;
     msg->buf      = ucs_malloc(msg->buf_size, "netlink recv message");
     if (msg->buf == NULL) {
