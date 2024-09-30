@@ -27,7 +27,6 @@ struct netlink_socket {
 
 struct netlink_message {
     char   *buf;
-    size_t buf_size;
 };
 
 

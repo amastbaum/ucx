@@ -1138,12 +1138,12 @@ int uct_iface_is_reachable_by_routing(
         struct sockaddr_storage *sa_remote)
 {
     ucs_status_t ret;
-    size_t msg_len;
     struct netlink_socket nl_sock;
     struct rtmsg *rtm;
     ucs_nl_parse_status_t parse_status;
     struct route_info info     = {0};
     struct netlink_message msg = {0}, recv_msg = {0};
+    size_t recv_msg_len;
 
     info.if_index = if_nametoindex(iface);
     if (info.if_index == 0) {
@@ -1181,13 +1181,13 @@ int uct_iface_is_reachable_by_routing(
         goto out;
     }
 
-    if (ucs_netlink_recv(&nl_sock, &recv_msg, &msg_len) != UCS_OK) {
+    if (ucs_netlink_recv(&nl_sock, &recv_msg, &recv_msg_len) != UCS_OK) {
         uct_iface_fill_info_str_buf(params,
                                     "failed to receive route netlink message");
         goto out;
     }
 
-    parse_status = ucs_netlink_parse_msg(&recv_msg, msg_len, parse_nl_route_cb,
+    parse_status = ucs_netlink_parse_msg(&recv_msg, recv_msg_len, parse_nl_route_cb,
                                          &info);
     if (parse_status == UCS_NL_STATUS_ERROR) {
         info.reachable = 0;

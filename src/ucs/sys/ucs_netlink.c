@@ -19,6 +19,8 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 
+#define NETLINK_MESSAGE_MAX_SIZE 8195
+
 ucs_status_t
 ucs_netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
 {
@@ -56,16 +58,15 @@ ucs_status_t ucs_netlink_send_msg_create(struct netlink_message *msg, int type,
                                          int flags, int nlmsg_len)
 {
     struct nlmsghdr *nlh;
-
-    msg->buf_size = sizeof(struct nlmsghdr) + nlmsg_len;
-    msg->buf      = ucs_malloc(msg->buf_size, "Netlink send message");
+    size_t msg_size = NLMSG_LENGTH(nlmsg_len);
+    msg->buf        = ucs_malloc(msg_size, "Netlink send message");
     if (msg->buf == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    memset(msg->buf, 0, msg->buf_size);
+    memset(msg->buf, 0, msg_size);
     nlh              = (struct nlmsghdr*)msg->buf;
-    nlh->nlmsg_len   = NLMSG_LENGTH(nlmsg_len);
+    nlh->nlmsg_len   = msg_size;
     nlh->nlmsg_type  = type;
     nlh->nlmsg_flags = flags;
     nlh->nlmsg_seq   = 1;
@@ -88,39 +89,18 @@ ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg)
     return UCS_OK;
 }
 
-static ucs_status_t peek_nlmsg_size(int sock_fd, size_t *len)
-{
-    ucs_status_t ret;
-    struct nlmsghdr msg = {0};
-    *len = sizeof(msg);
-
-    ret = ucs_socket_recv(sock_fd, &msg, len, MSG_PEEK | MSG_TRUNC);
-    if (ret != UCS_OK) {
-        ucs_diag("failed to read from netlink socket %d. returned %d",
-                 sock_fd, ret);
-    }
-
-    return ret;
-}
-
 void ucs_netlink_msg_destroy(struct netlink_message *msg)
 {
     if (msg->buf != NULL) {
         ucs_free(msg->buf);
         msg->buf      = NULL;
-        msg->buf_size = 0;
     }
 }
 
 ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
                               struct netlink_message *msg, size_t *len)
 {
-    if (peek_nlmsg_size(nl_sock->fd, len) != UCS_OK) {
-        return UCS_ERR_IO_ERROR;
-    }
-
-    msg->buf_size = *len;
-    msg->buf      = ucs_malloc(msg->buf_size, "netlink recv message");
+    msg->buf = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
     if (msg->buf == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
