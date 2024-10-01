@@ -83,9 +83,6 @@ static ucs_stats_class_t uct_iface_stats_class = {
 #endif
 
 
-#define ROUTE_BUFFER_SIZE 4096
-
-
 static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
                                               size_t length, unsigned flags)
 {
@@ -1051,14 +1048,15 @@ struct route_info {
     int reachable;
 };
 
-static int netlink_parse_rtattr(struct rtattr *attrs[], int max,
-                                struct rtattr *rta, int len)
+static int netlink_get_route_info(int **if_idx, void **dst_in_addr,
+                                  struct rtattr *rta, int len)
 {
-    memset(attrs, 0, sizeof(struct rtattr*) * (max + 1));
-
     for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
-        if (rta->rta_type <= max) {
-            attrs[rta->rta_type] = rta;
+        if (rta->rta_type == RTA_OIF) {
+            *if_idx = RTA_DATA(rta);
+        }
+        else if (rta->rta_type == RTA_DST) {
+            *dst_in_addr = RTA_DATA(rta);
         }
     }
 
@@ -1085,35 +1083,30 @@ static void parse_nl_route_cb(struct nlmsghdr *nlh, void *arg)
 {
     struct route_info *info = (struct route_info*)arg;
     struct rtmsg *rtm       = NLMSG_DATA(nlh);
-    struct rtattr *rta[RTA_MAX + 1];
     int *oif;
-
-    rtm->rtm_family = info->family;
-    rtm->rtm_table = RT_TABLE_MAIN;
+    void *dst_in_addr;
 
     if (rtm->rtm_family != info->family) {
         return;
     }
 
-    netlink_parse_rtattr(rta, RTA_MAX, RTM_RTA(rtm), RTM_PAYLOAD(nlh));
-
-    if (rta[RTA_OIF] == NULL || rta[RTA_DST] == NULL) {
+    netlink_get_route_info(&oif, &dst_in_addr, RTM_RTA(rtm), RTM_PAYLOAD(nlh));
+    if (oif == NULL || dst_in_addr == NULL) {
         return;
     }
 
-    oif = RTA_DATA(rta[RTA_OIF]);
     if (*oif == info->if_index) {
         if (info->family == AF_INET) {
-            struct in_addr *addr = RTA_DATA(rta[RTA_DST]);
-            uint32_t mask = htonl(~((1 << (32 - rtm->rtm_dst_len)) - 1));
+            struct in_addr *addr = (struct in_addr *)dst_in_addr;
+            uint32_t mask = UCS_MASK(rtm->rtm_dst_len);
             if ((info->remote_addr.ipv4.s_addr & mask) ==
                 (addr->s_addr & mask)) {
                 info->reachable = 1;
             }
         } else { /* AF_INET6 */
             int i;
-            struct in6_addr *network_addr = RTA_DATA(rta[RTA_DST]);
-            struct in6_addr *dest = (struct in6_addr*)&info->remote_addr.ipv6;
+            struct in6_addr *network_addr = (struct in6_addr *)dst_in_addr;
+            struct in6_addr *dest = (struct in6_addr *)&info->remote_addr.ipv6;
             struct in6_addr mask, masked_dest, masked_network;
             create_ipv6_mask(&mask, rtm->rtm_dst_len);
 

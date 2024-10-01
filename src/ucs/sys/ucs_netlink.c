@@ -5,21 +5,24 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#  include "config.h"
 #endif
 
 #include "ucs_netlink.h"
 
-#include <errno.h>
-#include <linux/netlink.h>
-#include <unistd.h>
-#include <sys/socket.h>
 #include <ucs/sys/sock.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 
+#include <errno.h>
+#include <linux/netlink.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+
 #define NETLINK_MESSAGE_MAX_SIZE 8195
+
 
 ucs_status_t
 ucs_netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
@@ -100,6 +103,7 @@ void ucs_netlink_msg_destroy(struct netlink_message *msg)
 ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
                               struct netlink_message *msg, size_t *len)
 {
+    *len = NETLINK_MESSAGE_MAX_SIZE;
     msg->buf = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
     if (msg->buf == NULL) {
         return UCS_ERR_NO_MEMORY;
