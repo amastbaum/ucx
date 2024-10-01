@@ -109,7 +109,7 @@ ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
         return UCS_ERR_NO_MEMORY;
     }
 
-    return ucs_socket_recv(nl_sock->fd, msg->buf, len, 0);
+    return ucs_socket_recv(nl_sock->fd, msg->buf, len);
 }
 
 ucs_nl_parse_status_t

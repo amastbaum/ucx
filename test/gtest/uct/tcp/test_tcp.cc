@@ -50,7 +50,7 @@ public:
         if (nb) {
             status = ucs_socket_recv_nb(fd, &msg, &msg_size);
         } else {
-            status = ucs_socket_recv(fd, &msg, &msg_size, 0);
+            status = ucs_socket_recv(fd, &msg, &msg_size);
         }
 
         return status;

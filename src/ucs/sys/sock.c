@@ -594,18 +594,18 @@ ucs_socket_handle_io(int fd, const void *data, size_t count,
 
 static inline ucs_status_t
 ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
-                    ucs_socket_io_func_t io_func, const char *name, int flags)
+                    ucs_socket_io_func_t io_func, const char *name)
 {
     ssize_t ret;
 
-    ret = io_func(fd, data, *length_p, flags | MSG_NOSIGNAL);
+    ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
     return ucs_socket_handle_io(fd, data, *length_p, length_p, 0,
                                 ret, errno, name);
 }
 
 static inline ucs_status_t
 ucs_socket_do_io_b(int fd, void *data, size_t *length,
-                   ucs_socket_io_func_t io_func, const char *name, int flags)
+                   ucs_socket_io_func_t io_func, const char *name)
 {
     ucs_status_t status;
     size_t done_cnt = 0, cur_cnt = *length;
@@ -616,11 +616,8 @@ ucs_socket_do_io_b(int fd, void *data, size_t *length,
     }
 
     do {
-        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name, flags);
+        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
         done_cnt += cur_cnt;
-        if ((flags & MSG_TRUNC) == 0) {
-            ucs_assert(done_cnt <= *length);
-        }
 
         cur_cnt = *length - done_cnt;
     } while (((type == SOCK_STREAM && done_cnt < *length) ||
@@ -648,7 +645,7 @@ ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p)
 {
     return ucs_socket_do_io_nb(fd, (void*)data, length_p,
-                               (ucs_socket_io_func_t)send, "send", 0);
+                               (ucs_socket_io_func_t)send, "send");
 }
 
 /* recv is declared as 'always_inline' on some platforms, it leads to
@@ -660,21 +657,19 @@ static ssize_t ucs_socket_recv_io(int fd, void *data, size_t size, int flags)
 
 ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p)
 {
-    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io, "recv",
-                               0);
+    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io, "recv");
 }
 
 ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)
 {
     size_t length_cpy = length;
     return ucs_socket_do_io_b(fd, (void*)data, &length_cpy,
-                              (ucs_socket_io_func_t)send, "send", 0);
+                              (ucs_socket_io_func_t)send, "send");
 }
 
-ucs_status_t ucs_socket_recv(int fd, void *data, size_t *length, int flags)
+ucs_status_t ucs_socket_recv(int fd, void *data, size_t *length)
 {
-    return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io, "recv",
-                              flags);
+    return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io, "recv");
 }
 
 ucs_status_t
