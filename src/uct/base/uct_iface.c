@@ -1139,8 +1139,8 @@ int uct_iface_is_reachable_by_routing(
     struct netlink_socket nl_sock;
     struct nlmsghdr *nlh;
     struct rtmsg *rtm;
-    char *recv_msg;
     size_t recv_msg_len;
+    char *recv_msg = NULL;
     struct route_info info = {0};
     char send_msg[NLMSG_LENGTH(sizeof(struct rtmsg))] = {0};
 
