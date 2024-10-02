@@ -27,6 +27,7 @@ struct netlink_socket {
 
 struct netlink_message {
     char   *buf;
+    size_t len;
 };
 
 
@@ -52,33 +53,6 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock);
 
 
 /**
- * Allocates a message buffer for sending and initializes the fields of the
- * netlink message.
- * IMPORTANT NOTE: It is the user's responsibility to free the allocated buffer
- * by calling ucs_netlink_msg_destroy after completing the send operation.
- *
- * @param [out]  msg        Pointer to the message structure that will hold the
- *                          allocated buffer.
- * @param [in]   type       Message type (RTM_GETROUTE, RTM_GETRULE, etc.).
- * @param [in]   flags      Message flags (NLM_F_REQUEST, NLM_F_DUMP, etc.).
- * @param [in]   nlmsg_len  Length of the message (including header).
- *
- * @return UCS_OK if created successfully, or error code otherwise.
- */
-ucs_status_t ucs_netlink_send_msg_create(struct netlink_message *msg, int type,
-                                         int flags, int nlmsg_len);
-
-
-/**
- * Frees the netlink message buffer.
- *
- * @param [in]  msg  Pointer to the message structure containing the buffer
- *                   to be freed.
- */
-void ucs_netlink_msg_destroy(struct netlink_message *msg);
-
-
-/**
  * Sends a netlink request through a specified socket.
  *
  * @param [in]  nl_sock  Pointer to the netlink socket used for sending
@@ -99,12 +73,11 @@ ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg);
  * @param [in]   nl_sock  Pointer to the netlink socket from which to receive
  *                        the response.
  * @param [out]  msg      The struct that will hold the received message.
- * @param [out]  len      Pointer to store the length of the received message.
  *
  * @return UCS_OK if received successfully, or error code otherwise.
  */
 ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
-                              struct netlink_message *msg, size_t *len);
+                              struct netlink_message *msg);
 
 
 /**

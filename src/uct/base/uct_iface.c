@@ -82,6 +82,8 @@ static ucs_stats_class_t uct_iface_stats_class = {
 };
 #endif
 
+#define NETLINK_MESSAGE_MAX_SIZE 8195
+
 
 static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
                                               size_t length, unsigned flags)
@@ -1132,11 +1134,12 @@ int uct_iface_is_reachable_by_routing(
 {
     ucs_status_t ret;
     struct netlink_socket nl_sock;
+    struct nlmsghdr *nlh;
     struct rtmsg *rtm;
     ucs_nl_parse_status_t parse_status;
-    struct route_info info     = {0};
-    struct netlink_message msg = {0}, recv_msg = {0};
-    size_t recv_msg_len;
+    struct route_info info = {0};
+    struct netlink_message send_msg = {0}, recv_msg = {0};
+    char send_msg_buf[NLMSG_LENGTH(sizeof(struct rtmsg))] = {0};
 
     info.if_index = if_nametoindex(iface);
     if (info.if_index == 0) {
@@ -1160,35 +1163,54 @@ int uct_iface_is_reachable_by_routing(
         return 0;
     }
 
-    ucs_netlink_send_msg_create(&msg, RTM_GETROUTE, NLM_F_REQUEST | NLM_F_DUMP,
-                                sizeof(struct rtmsg));
+    send_msg.len = NLMSG_LENGTH(sizeof(struct rtmsg));
+    send_msg.buf = send_msg_buf;
 
-    rtm             = (struct rtmsg*)NLMSG_DATA(msg.buf);
-    rtm->rtm_family = info.family;
-    rtm->rtm_table  = RT_TABLE_MAIN;
+    nlh              = (struct nlmsghdr *)send_msg.buf;
+    nlh->nlmsg_len   = send_msg.len;
+    nlh->nlmsg_type  = RTM_GETROUTE;
+    nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    nlh->nlmsg_seq   = 1;
+    nlh->nlmsg_pid   = getpid();
 
-    ret = ucs_netlink_send(&nl_sock, &msg);
+    rtm              = (struct rtmsg *)NLMSG_DATA(send_msg.buf);
+    rtm->rtm_family  = info.family;
+    rtm->rtm_table   = RT_TABLE_MAIN;
+
+    ret = ucs_netlink_send(&nl_sock, &send_msg);
     if (ret != UCS_OK) {
         uct_iface_fill_info_str_buf(params,
                                     "failed to send route netlink message");
         goto out;
     }
 
-    if (ucs_netlink_recv(&nl_sock, &recv_msg, &recv_msg_len) != UCS_OK) {
+    recv_msg.len = NETLINK_MESSAGE_MAX_SIZE;
+    recv_msg.buf = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
+    if (recv_msg.buf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if (ucs_netlink_recv(&nl_sock, &recv_msg) != UCS_OK) {
         uct_iface_fill_info_str_buf(params,
                                     "failed to receive route netlink message");
         goto out;
     }
 
-    parse_status = ucs_netlink_parse_msg(&recv_msg, recv_msg_len, parse_nl_route_cb,
+    parse_status = ucs_netlink_parse_msg(&recv_msg, recv_msg.len, parse_nl_route_cb,
                                          &info);
     if (parse_status == UCS_NL_STATUS_ERROR) {
         info.reachable = 0;
     }
 
 out:
-    ucs_netlink_msg_destroy(&msg);
-    ucs_netlink_msg_destroy(&recv_msg);
+    if (recv_msg.buf != NULL) {
+        free(recv_msg.buf);
+    }
+
+    // if (msg.buf != NULL) {
+    //     free(msg.buf);
+    // }
+
     ucs_netlink_socket_close(&nl_sock);
     return info.reachable;
 }

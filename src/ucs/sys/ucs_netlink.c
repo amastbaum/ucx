@@ -21,9 +21,6 @@
 #include <unistd.h>
 
 
-#define NETLINK_MESSAGE_MAX_SIZE 8195
-
-
 ucs_status_t
 ucs_netlink_socket_create(struct netlink_socket *nl_sock, int protocol)
 {
@@ -57,27 +54,6 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock)
     }
 }
 
-ucs_status_t ucs_netlink_send_msg_create(struct netlink_message *msg, int type,
-                                         int flags, int nlmsg_len)
-{
-    struct nlmsghdr *nlh;
-    size_t msg_size = NLMSG_LENGTH(nlmsg_len);
-    msg->buf        = ucs_malloc(msg_size, "Netlink send message");
-    if (msg->buf == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    memset(msg->buf, 0, msg_size);
-    nlh              = (struct nlmsghdr*)msg->buf;
-    nlh->nlmsg_len   = msg_size;
-    nlh->nlmsg_type  = type;
-    nlh->nlmsg_flags = flags;
-    nlh->nlmsg_seq   = 1;
-    nlh->nlmsg_pid   = getpid();
-
-    return UCS_OK;
-}
-
 ucs_status_t
 ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg)
 {
@@ -92,24 +68,10 @@ ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg)
     return UCS_OK;
 }
 
-void ucs_netlink_msg_destroy(struct netlink_message *msg)
-{
-    if (msg->buf != NULL) {
-        ucs_free(msg->buf);
-        msg->buf      = NULL;
-    }
-}
-
 ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
-                              struct netlink_message *msg, size_t *len)
+                              struct netlink_message *msg)
 {
-    *len = NETLINK_MESSAGE_MAX_SIZE;
-    msg->buf = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
-    if (msg->buf == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    return ucs_socket_recv(nl_sock->fd, msg->buf, len);
+    return ucs_socket_recv(nl_sock->fd, msg->buf, &msg->len);
 }
 
 ucs_nl_parse_status_t
