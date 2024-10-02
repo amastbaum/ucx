@@ -54,10 +54,9 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock)
     }
 }
 
-ucs_status_t
-ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg)
+ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock, char *msg)
 {
-    struct nlmsghdr *nlh = (struct nlmsghdr*)msg->buf;
+    struct nlmsghdr *nlh = (struct nlmsghdr *)msg;
     ucs_status_t ret = ucs_socket_send(nl_sock->fd, nlh, nlh->nlmsg_len);
     if (ret < 0) {
         ucs_diag("failed to send netlink message. returned %d", ret);
@@ -68,20 +67,20 @@ ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg)
     return UCS_OK;
 }
 
-ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
-                              struct netlink_message *msg)
+ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock, char *msg_buf,
+                              size_t *msg_buf_len)
 {
-    return ucs_socket_recv(nl_sock->fd, msg->buf, &msg->len);
+    return ucs_socket_recv(nl_sock->fd, msg_buf, msg_buf_len);
 }
 
 ucs_nl_parse_status_t
-ucs_netlink_parse_msg(struct netlink_message *msg, size_t msg_len,
+ucs_netlink_parse_msg(char *msg, size_t msg_len,
                       void (*parse_cb)(struct nlmsghdr *h, void *arg),
                       void *arg)
 {
     struct nlmsghdr *nlh;
 
-    for (nlh = (struct nlmsghdr*)msg->buf; NLMSG_OK(nlh, msg_len);
+    for (nlh = (struct nlmsghdr *)msg; NLMSG_OK(nlh, msg_len);
          nlh = NLMSG_NEXT(nlh, msg_len)) {
         if (nlh->nlmsg_type == NLMSG_DONE) {
             return UCS_NL_STATUS_DONE;

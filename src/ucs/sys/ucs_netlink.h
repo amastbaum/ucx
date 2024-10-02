@@ -25,12 +25,6 @@ struct netlink_socket {
 };
 
 
-struct netlink_message {
-    char   *buf;
-    size_t len;
-};
-
-
 /**
  * Creates a netlink socket.
  *
@@ -57,12 +51,11 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock);
  *
  * @param [in]  nl_sock  Pointer to the netlink socket used for sending
  *                       the request.
- * @param [in]  msg      The message to be sent.
+ * @param [in]  msg      Pointer to the netlink message to be sent.
  *
  * @return UCS_OK if sent successfully, or error code otherwise.
  */
-ucs_status_t
-ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg);
+ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock, char *msg);
 
 
 /**
@@ -73,11 +66,12 @@ ucs_netlink_send(struct netlink_socket *nl_sock, struct netlink_message *msg);
  * @param [in]   nl_sock  Pointer to the netlink socket from which to receive
  *                        the response.
  * @param [out]  msg      The struct that will hold the received message.
+ * @param [out]  len      Pointer to store the length of the received message.
  *
  * @return UCS_OK if received successfully, or error code otherwise.
  */
-ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
-                              struct netlink_message *msg);
+ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock, char *msg_buf,
+                              size_t *msg_buf_len);
 
 
 /**
@@ -85,7 +79,7 @@ ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
  * The callback function can handle different types and formats of netlink
  * messages.
  *
- * @param [in]  msg       The netlink message to parse.
+ * @param [in]  msg       Pointer to the netlink message to parse.
  * @param [in]  msg_len   The length of the message.
  * @param [in]  parse_cb  The parsing callback function.
  * @param [in]  arg       The parsing callback function's arguments.
@@ -96,7 +90,7 @@ ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock,
  *         message sequence, or UCS_NL_STATUS_ERROR otherwise.
  */
 ucs_nl_parse_status_t
-ucs_netlink_parse_msg(struct netlink_message *msg, size_t msg_len,
+ucs_netlink_parse_msg(char *msg, size_t msg_len,
                       void (*parse_cb)(struct nlmsghdr *h, void *arg),
                       void *arg);
 
