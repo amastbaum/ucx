@@ -1139,7 +1139,6 @@ int uct_iface_is_reachable_by_routing(
     struct netlink_socket nl_sock;
     struct nlmsghdr *nlh;
     struct rtmsg *rtm;
-    ucs_nl_parse_status_t parse_status;
     char *recv_msg;
     size_t recv_msg_len;
     struct route_info info = {0};
@@ -1197,11 +1196,11 @@ int uct_iface_is_reachable_by_routing(
         goto out;
     }
 
-    parse_status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_nl_route_cb,
-                                         &info);
-    if (parse_status == UCS_NL_STATUS_ERROR) {
-        info.reachable = 0;
+    ucs_netlink_foreach(nlh, recv_msg, recv_msg_len) {
+        parse_nl_route_cb(nlh, &info);
     }
+
+    ucs_netlink_handle_parse_error(nlh, goto out);
 
 out:
     if (recv_msg != NULL) {

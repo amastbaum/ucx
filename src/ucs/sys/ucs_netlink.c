@@ -72,28 +72,3 @@ ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock, char *msg_buf,
 {
     return ucs_socket_recv(nl_sock->fd, msg_buf, msg_buf_len);
 }
-
-ucs_nl_parse_status_t
-ucs_netlink_parse_msg(char *msg, size_t msg_len,
-                      void (*parse_cb)(struct nlmsghdr *h, void *arg),
-                      void *arg)
-{
-    struct nlmsghdr *nlh;
-
-    for (nlh = (struct nlmsghdr *)msg; NLMSG_OK(nlh, msg_len);
-         nlh = NLMSG_NEXT(nlh, msg_len)) {
-        if (nlh->nlmsg_type == NLMSG_DONE) {
-            return UCS_NL_STATUS_DONE;
-        }
-
-        if (nlh->nlmsg_type == NLMSG_ERROR) {
-            struct nlmsgerr *err = (struct nlmsgerr*)NLMSG_DATA(nlh);
-            ucs_diag("failed to parse netlink message header (%d)", err->error);
-            return UCS_NL_STATUS_ERROR;
-        }
-
-        parse_cb(nlh, arg);
-    }
-
-    return UCS_NL_STATUS_OK;
-}

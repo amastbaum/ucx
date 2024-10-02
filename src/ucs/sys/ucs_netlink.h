@@ -13,6 +13,22 @@
 #include <linux/netlink.h>
 
 
+#define ucs_netlink_foreach(elem, msg, len) \
+    for (elem = (struct nlmsghdr *)msg; \
+         NLMSG_OK(elem, len) && (elem->nlmsg_type != NLMSG_DONE) && \
+         (elem->nlmsg_type != NLMSG_ERROR); \
+         elem = NLMSG_NEXT(elem, len))
+
+#define ucs_netlink_handle_parse_error(nlh, action) \
+    do { \
+        if (nlh->nlmsg_type == NLMSG_ERROR) { \
+            ucs_diag("failed to parse netlink message header (%d)", \
+                    ((struct nlmsgerr*)NLMSG_DATA(nlh))->error); \
+            action; \
+        } \
+    } while (0)
+
+
 typedef enum ucs_nl_parse_status {
     UCS_NL_STATUS_OK    = 0,
     UCS_NL_STATUS_DONE  = 1,
@@ -73,25 +89,5 @@ ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock, char *msg);
 ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock, char *msg_buf,
                               size_t *msg_buf_len);
 
-
-/**
- * Parses a netlink message using a user-defined callback function.
- * The callback function can handle different types and formats of netlink
- * messages.
- *
- * @param [in]  msg       Pointer to the netlink message to parse.
- * @param [in]  msg_len   The length of the message.
- * @param [in]  parse_cb  The parsing callback function.
- * @param [in]  arg       The parsing callback function's arguments.
- *
- * @return UCS_NL_STATUS_OK if the message was parsed successfully and more
- *         messages may follow,
- *         UCS_NL_STATUS_DONE if this was the last message in a multi-part
- *         message sequence, or UCS_NL_STATUS_ERROR otherwise.
- */
-ucs_nl_parse_status_t
-ucs_netlink_parse_msg(char *msg, size_t msg_len,
-                      void (*parse_cb)(struct nlmsghdr *h, void *arg),
-                      void *arg);
 
 #endif // UCS_NETLINK_H
