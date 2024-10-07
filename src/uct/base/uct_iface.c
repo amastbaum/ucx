@@ -1084,7 +1084,7 @@ static void create_ipv6_mask(struct in6_addr *mask, unsigned char prefix_len)
     }
 }
 
-static void parse_nl_route_cb(struct nlmsghdr *nlh, void *arg)
+static void parse_nl_route_entry(struct nlmsghdr *nlh, void *arg)
 {
     struct route_info *info = (struct route_info*)arg;
     struct rtmsg *rtm       = NLMSG_DATA(nlh);
@@ -1136,18 +1136,22 @@ int uct_iface_is_reachable_by_routing(
         struct sockaddr_storage *sa_remote)
 {
     ucs_status_t ret;
-    struct netlink_socket nl_sock;
+    struct rtmsg rtm;
     struct nlmsghdr *nlh;
-    struct rtmsg *rtm;
     size_t recv_msg_len;
     char *recv_msg = NULL;
     struct route_info info = {0};
-    char send_msg[NLMSG_LENGTH(sizeof(struct rtmsg))] = {0};
 
-    info.if_index = if_nametoindex(iface);
-    if (info.if_index == 0) {
-        uct_iface_fill_info_str_buf(params, "failed to get interface index");
-        return 0;
+    rtm.rtm_family = info.family;
+    rtm.rtm_table  = RT_TABLE_MAIN;
+
+    recv_msg_len = NETLINK_MESSAGE_MAX_SIZE;
+    recv_msg     = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
+    if (recv_msg == NULL) {
+        uct_iface_fill_info_str_buf(
+                    params,
+                    "failed to allocate a buffer for netlink receive message");
+        return UCS_ERR_NO_MEMORY;
     }
 
     info.family = sa_remote->ss_family;
@@ -1160,44 +1164,22 @@ int uct_iface_is_reachable_by_routing(
         return 0;
     }
 
-    ret = ucs_netlink_socket_create(&nl_sock, NETLINK_ROUTE);
-    if (ret != UCS_OK) {
-        uct_iface_fill_info_str_buf(params, "failed to open netlink socket");
+    info.if_index = if_nametoindex(iface);
+    if (info.if_index == 0) {
+        uct_iface_fill_info_str_buf(params, "failed to get interface index");
         return 0;
     }
 
-    nlh              = (struct nlmsghdr *)send_msg;
-    nlh->nlmsg_len   = sizeof(send_msg);
-    nlh->nlmsg_type  = RTM_GETROUTE;
-    nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
-    nlh->nlmsg_seq   = 1;
-    nlh->nlmsg_pid   = getpid();
-
-    rtm              = (struct rtmsg *)NLMSG_DATA(send_msg);
-    rtm->rtm_family  = info.family;
-    rtm->rtm_table   = RT_TABLE_MAIN;
-
-    ret = ucs_netlink_send(&nl_sock, send_msg);
+    ret = ucs_netlink_send_recv(NETLINK_ROUTE, &rtm, sizeof(rtm), recv_msg,
+                                &recv_msg_len, RTM_GETROUTE);
     if (ret != UCS_OK) {
-        uct_iface_fill_info_str_buf(params,
-                                    "failed to send route netlink message");
-        goto out;
-    }
-
-    recv_msg_len = NETLINK_MESSAGE_MAX_SIZE;
-    recv_msg     = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
-    if (recv_msg == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    if (ucs_netlink_recv(&nl_sock, recv_msg, &recv_msg_len) != UCS_OK) {
-        uct_iface_fill_info_str_buf(params,
-                                    "failed to receive route netlink message");
-        goto out;
+        uct_iface_fill_info_str_buf(
+                    params, "failed to send netlink route message (%d)", ret);
+        return 0;
     }
 
     ucs_netlink_foreach(nlh, recv_msg, recv_msg_len) {
-        parse_nl_route_cb(nlh, &info);
+        parse_nl_route_entry(nlh, &info);
     }
 
     ucs_netlink_handle_parse_error(nlh, goto out);
@@ -1207,7 +1189,6 @@ out:
         free(recv_msg);
     }
 
-    ucs_netlink_socket_close(&nl_sock);
     return info.reachable;
 }
 

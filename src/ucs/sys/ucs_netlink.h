@@ -29,13 +29,6 @@
     } while (0)
 
 
-typedef enum ucs_nl_parse_status {
-    UCS_NL_STATUS_OK    = 0,
-    UCS_NL_STATUS_DONE  = 1,
-    UCS_NL_STATUS_ERROR = 2,
-} ucs_nl_parse_status_t;
-
-
 struct netlink_socket {
     int fd;
 };
@@ -63,31 +56,25 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock);
 
 
 /**
- * Sends a netlink request through a specified socket.
+ * Sends and receives a netlink message using a user allocated buffer.
  *
- * @param [in]  nl_sock  Pointer to the netlink socket used for sending
- *                       the request.
- * @param [in]  msg      Pointer to the netlink message to be sent.
- *
- * @return UCS_OK if sent successfully, or error code otherwise.
- */
-ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock, char *msg);
-
-
-/**
- * Receives a netlink response and allocates a buffer for it.
- * IMPORTANT NOTE: The user is responsible for freeing this buffer after
- *                 use by calling ucs_netlink_msg_destroy.
- *
- * @param [in]   nl_sock  Pointer to the netlink socket from which to receive
- *                        the response.
- * @param [out]  msg      The struct that will hold the received message.
- * @param [out]  len      Pointer to store the length of the received message.
+ * @param [in]    protocol         The communication protocol to be used
+ *                                 (NETLINK_ROUTE, NETLINK_NETFILTER, etc.).
+ * @param [in]    nl_protocol_hdr  A struct that holds nl protocol specific
+ *                                 details and is placed in nlmsghdr.
+ * @param [in]    nl_protocol_hdr_size Protocol struct size.
+ * @param [out]   recv_msg_buf     The buffer that will hold the received message.
+ * @param [inout] recv_msg_buf_len Pointer to the size of the buffer and to
+ *                                 store the length of the received message.
+ * @param [in]    nlmsg_type       Netlink message type (RTM_GETROUTE,
+ *                                 RTM_GETNEIGH, etc.).
  *
  * @return UCS_OK if received successfully, or error code otherwise.
  */
-ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock, char *msg_buf,
-                              size_t *msg_buf_len);
+ucs_status_t
+ucs_netlink_send_recv(int protocol, const void *nl_protocol_hdr,
+                      size_t nl_protocol_hdr_size, char *recv_msg_buf,
+                      size_t *recv_msg_buf_len, unsigned short nlmsg_type);
 
 
 #endif // UCS_NETLINK_H

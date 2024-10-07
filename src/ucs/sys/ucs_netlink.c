@@ -54,21 +54,52 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock)
     }
 }
 
-ucs_status_t ucs_netlink_send(struct netlink_socket *nl_sock, char *msg)
+ucs_status_t
+ucs_netlink_send_recv(int protocol, const void *nl_protocol_hdr,
+                      size_t nl_protocol_hdr_size, char *recv_msg_buf,
+                      size_t *recv_msg_buf_len, unsigned short nlmsg_type)
 {
-    struct nlmsghdr *nlh = (struct nlmsghdr *)msg;
-    ucs_status_t ret = ucs_socket_send(nl_sock->fd, nlh, nlh->nlmsg_len);
-    if (ret < 0) {
-        ucs_diag("failed to send netlink message. returned %d", ret);
-        ucs_close_fd(&nl_sock->fd);
-        return UCS_ERR_IO_ERROR;
+    ucs_status_t ret;
+    struct netlink_socket nl_sock;
+    struct nlmsghdr *nlh;
+    char *send_msg = NULL;
+
+    ret = ucs_netlink_socket_create(&nl_sock, NETLINK_ROUTE);
+    if (ret != UCS_OK) {
+        ucs_diag("failed to open netlink socket");
+        return ret;
     }
 
-    return UCS_OK;
-}
+    send_msg = ucs_malloc(NLMSG_LENGTH(nl_protocol_hdr_size), "Netlink send message");
+    if (send_msg == NULL) {
+        goto out;
+    }
 
-ucs_status_t ucs_netlink_recv(struct netlink_socket *nl_sock, char *msg_buf,
-                              size_t *msg_buf_len)
-{
-    return ucs_socket_recv(nl_sock->fd, msg_buf, msg_buf_len);
+    nlh              = (struct nlmsghdr *)send_msg;
+    nlh->nlmsg_len   = NLMSG_LENGTH(nl_protocol_hdr_size);
+    nlh->nlmsg_type  = nlmsg_type;
+    nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    nlh->nlmsg_seq   = 1;
+    nlh->nlmsg_pid   = getpid();
+    memcpy(NLMSG_DATA(send_msg), nl_protocol_hdr, nl_protocol_hdr_size);
+
+    ret = ucs_socket_send(nl_sock.fd, nlh, nlh->nlmsg_len);
+    if (ret < 0) {
+        ucs_diag("failed to send netlink message. returned %d", ret);
+        goto out;
+    }
+
+    ret = ucs_socket_recv(nl_sock.fd, recv_msg_buf, recv_msg_buf_len);
+    if (ret != UCS_OK) {
+        ucs_diag("failed to receive route netlink message");
+        goto out;
+    }
+
+out:
+    if (send_msg != NULL) {
+        free(send_msg);
+    }
+
+    ucs_netlink_socket_close(&nl_sock);
+    return ret;
 }
