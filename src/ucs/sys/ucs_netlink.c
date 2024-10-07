@@ -55,9 +55,9 @@ void ucs_netlink_socket_close(struct netlink_socket *nl_sock)
 }
 
 ucs_status_t
-ucs_netlink_send_recv(int protocol, const void *nl_protocol_hdr,
-                      size_t nl_protocol_hdr_size, char *recv_msg_buf,
-                      size_t *recv_msg_buf_len, unsigned short nlmsg_type)
+ucs_netlink_send_cmd(int protocol, const void *nl_protocol_hdr,
+                     size_t nl_protocol_hdr_size, char *recv_msg_buf,
+                     size_t *recv_msg_buf_len, unsigned short nlmsg_type)
 {
     ucs_status_t ret;
     struct netlink_socket nl_sock;

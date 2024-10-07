@@ -529,6 +529,17 @@ static int ucs_socket_get_type(int fd)
     return type;
 }
 
+static int ucs_socket_has_more_data(int fd, ucs_status_t status,
+                                    size_t curr_len, size_t total_len)
+{
+    int type = ucs_socket_get_type(fd);
+    if (type < 0) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return (type == SOCK_STREAM) && (curr_len < total_len) && (status == UCS_OK);
+}
+
 static ucs_status_t
 ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_errno)
 {
@@ -596,9 +607,7 @@ static inline ucs_status_t
 ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
                     ucs_socket_io_func_t io_func, const char *name)
 {
-    ssize_t ret;
-
-    ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
+    ssize_t ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
     return ucs_socket_handle_io(fd, data, *length_p, length_p, 0,
                                 ret, errno, name);
 }
@@ -607,22 +616,16 @@ static inline ucs_status_t
 ucs_socket_do_io_b(int fd, void *data, size_t *length,
                    ucs_socket_io_func_t io_func, const char *name)
 {
-    ucs_status_t status;
     size_t done_cnt = 0, cur_cnt = *length;
-    int type = ucs_socket_get_type(fd);
-
-    if (type < 0) {
-        return UCS_ERR_IO_ERROR;
-    }
+    ucs_status_t status;
 
     do {
         status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
         done_cnt += cur_cnt;
 
         cur_cnt = *length - done_cnt;
-    } while (((type == SOCK_STREAM && done_cnt < *length) ||
-              (type != SOCK_STREAM && done_cnt == 0)) &&
-             ((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS)));
+    } while (ucs_socket_has_more_data(fd, status, done_cnt, *length) ||
+             (status == UCS_ERR_NO_PROGRESS));
 
     *length = done_cnt;
     return status;
