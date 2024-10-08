@@ -29,32 +29,6 @@
     } while (0)
 
 
-struct netlink_socket {
-    int fd;
-};
-
-
-/**
- * Creates a netlink socket.
- *
- * @param [out] nl_sock   Pointer to a netlink socket structure that will be
- *                        filled with socket information.
- * @param [in]  protocol  The communication protocol to be used.
- *
- * @return UCS_OK if created successfully, or error code otherwise.
- */
-ucs_status_t
-ucs_netlink_socket_create(struct netlink_socket *nl_sock, int protocol);
-
-
-/**
- * Creates a netlink socket.
- *
- * @param [in]  nl_sock   Pointer to the netlink socket to be closed.
- */
-void ucs_netlink_socket_close(struct netlink_socket *nl_sock);
-
-
 /**
  * Sends and receives a netlink message using a user allocated buffer.
  *

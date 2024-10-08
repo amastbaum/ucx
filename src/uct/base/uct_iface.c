@@ -1180,9 +1180,11 @@ int uct_iface_is_reachable_by_routing(
 
     ucs_netlink_foreach(nlh, recv_msg, recv_msg_len) {
         parse_nl_route_entry(nlh, &info);
+        ucs_netlink_handle_parse_error(nlh, goto out);
+        if (info.reachable) {
+            break;
+        }
     }
-
-    ucs_netlink_handle_parse_error(nlh, goto out);
 
 out:
     if (recv_msg != NULL) {
