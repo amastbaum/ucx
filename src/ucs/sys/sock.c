@@ -647,8 +647,8 @@ ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p
 
 static size_t calc_total_iov_bytes(const struct iovec *iov, size_t iov_cnt)
 {
-    size_t total_iov_bytes;
     int i;
+    size_t total_iov_bytes = 0;
 
     for (i = 0; i < iov_cnt; i++) {
         total_iov_bytes += iov[i].iov_len;
