@@ -517,29 +517,6 @@ int ucs_socket_max_conn()
     }
 }
 
-static int ucs_socket_get_type(int fd)
-{
-    int type;
-    ucs_status_t status = ucs_socket_getopt(fd, SOL_SOCKET, SO_TYPE,
-                                            (void*)&type, sizeof(type));
-    if (status != UCS_OK) {
-        return -1;
-    }
-
-    return type;
-}
-
-static int ucs_socket_has_more_data(int fd, ucs_status_t status,
-                                    size_t curr_len, size_t total_len)
-{
-    int type = ucs_socket_get_type(fd);
-    if (type < 0) {
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return (type == SOCK_STREAM) && (curr_len < total_len) && (status == UCS_OK);
-}
-
 static ucs_status_t
 ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_errno)
 {
@@ -613,21 +590,20 @@ ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
 }
 
 static inline ucs_status_t
-ucs_socket_do_io_b(int fd, void *data, size_t *length,
+ucs_socket_do_io_b(int fd, void *data, size_t length,
                    ucs_socket_io_func_t io_func, const char *name)
 {
-    size_t done_cnt = 0, cur_cnt = *length;
+    size_t done_cnt = 0, cur_cnt = length;
     ucs_status_t status;
 
     do {
         status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
         done_cnt += cur_cnt;
+        ucs_assert(done_cnt <= length);
+        cur_cnt = length - done_cnt;
+    } while ((done_cnt < length) &&
+             ((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS)));
 
-        cur_cnt = *length - done_cnt;
-    } while (ucs_socket_has_more_data(fd, status, done_cnt, *length) ||
-             (status == UCS_ERR_NO_PROGRESS));
-
-    *length = done_cnt;
     return status;
 }
 
@@ -643,48 +619,6 @@ ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p
 
     ret = iov_func(fd, &msg, MSG_NOSIGNAL);
     return ucs_socket_handle_io(fd, iov, iov_cnt, length_p, 1, ret, errno, name);
-}
-
-static size_t calc_total_iov_bytes(const struct iovec *iov, size_t iov_cnt)
-{
-    int i;
-    size_t total_iov_bytes = 0;
-
-    for (i = 0; i < iov_cnt; i++) {
-        total_iov_bytes += iov[i].iov_len;
-    }
-
-    return total_iov_bytes;
-}
-
-static inline ucs_status_t
-ucs_socket_do_iov_b(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p,
-                    ucs_socket_iov_func_t iov_func, const char *name)
-{
-    ucs_status_t ret;
-    ssize_t cur_cnt, total_done = 0;
-    ssize_t bytes_left = calc_total_iov_bytes(iov, iov_cnt);
-
-    do {
-        ret = ucs_socket_do_iov_nb(fd, iov, iov_cnt, length_p, iov_func, name);
-        cur_cnt = *length_p;
-        total_done += cur_cnt;
-        bytes_left -= cur_cnt;
-
-        while (cur_cnt > 0) {
-            if (cur_cnt >= iov[0].iov_len) {
-                cur_cnt -= iov[0].iov_len;
-                iov++;
-                iov_cnt--;
-            } else {
-                iov[0].iov_base = (char *)iov[0].iov_base + cur_cnt;
-                iov[0].iov_len -= cur_cnt;
-                break;
-            }
-        }
-    } while (bytes_left > 0);
-
-    return ret;
 }
 
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p)
@@ -707,12 +641,11 @@ ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p)
 
 ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)
 {
-    size_t length_cpy = length;
-    return ucs_socket_do_io_b(fd, (void*)data, &length_cpy,
+    return ucs_socket_do_io_b(fd, (void*)data, length,
                               (ucs_socket_io_func_t)send, "send");
 }
 
-ucs_status_t ucs_socket_recv(int fd, void *data, size_t *length)
+ucs_status_t ucs_socket_recv(int fd, void *data, size_t length)
 {
     return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io, "recv");
 }
@@ -721,13 +654,6 @@ ucs_status_t
 ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p)
 {
     return ucs_socket_do_iov_nb(fd, iov, iov_cnt, length_p, sendmsg, "sendv");
-}
-
-ucs_status_t
-ucs_socket_sendv(int fd, struct iovec *iov, size_t iov_cnt, size_t length)
-{
-    size_t length_cpy = length;
-    return ucs_socket_do_iov_b(fd, iov, iov_cnt, &length_cpy, sendmsg, "sendv");
 }
 
 ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)

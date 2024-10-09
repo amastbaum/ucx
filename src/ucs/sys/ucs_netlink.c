@@ -53,6 +53,7 @@ ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
     int fd;
     struct nlmsghdr nlh;
     struct iovec iov[2];
+    size_t send_msg_len = NLMSG_LENGTH(nl_protocol_hdr_size);
 
     ret = ucs_netlink_socket_create(&fd, NETLINK_ROUTE);
     if (ret != UCS_OK) {
@@ -61,7 +62,7 @@ ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
     }
 
     memset(iov, 0, sizeof(iov));
-    nlh.nlmsg_len   = NLMSG_LENGTH(nl_protocol_hdr_size);
+    nlh.nlmsg_len   = send_msg_len;
     nlh.nlmsg_type  = nlmsg_type;
     nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
     nlh.nlmsg_seq   = 1;
@@ -71,13 +72,19 @@ ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
     iov[1].iov_base = nl_protocol_hdr;
     iov[1].iov_len  = nl_protocol_hdr_size;
 
-    ret = ucs_socket_sendv(fd, iov, 2, nlh.nlmsg_len);
-    if (ret < 0) {
+    do {
+        ret = ucs_socket_sendv_nb(fd, iov, 2, &send_msg_len);
+    } while (ret == UCS_ERR_NO_PROGRESS);
+
+    if (ret != UCS_OK) {
         ucs_diag("failed to send netlink message. returned %d", ret);
         goto out;
     }
 
-    ret = ucs_socket_recv(fd, recv_msg_buf, recv_msg_buf_len);
+    do {
+        ret = ucs_socket_recv_nb(fd, recv_msg_buf, recv_msg_buf_len);
+    } while (ret == UCS_ERR_NO_PROGRESS);
+
     if (ret != UCS_OK) {
         ucs_diag("failed to receive route netlink message");
         goto out;

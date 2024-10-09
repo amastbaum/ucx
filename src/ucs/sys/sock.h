@@ -322,23 +322,6 @@ ucs_status_t ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt,
 
 
 /**
- * Blocking send operation sends I/O vector on the connected (or bound
- * connectionless) socket referred to by the file descriptor `fd`.
- *
- * @param [in]      fd              Socket fd.
- * @param [in]      iov             A pointer to an array of iovec buffers.
- * @param [in]      iov_cnt         The number of buffers pointed to by
- *                                  the iov parameter.
- * @param [in]      length          The amount of data transmitted is written to
- *                                  this argument.
- *
- * @return UCS_OK on success or an error code on failure.
- */
-ucs_status_t
-ucs_socket_sendv(int fd, struct iovec *iov, size_t iov_cnt, size_t length);
-
-
-/**
  * Blocking receive operation receives data from the connected (or bound
  * connectionless) socket referred to by the file descriptor `fd`.
  *
@@ -350,7 +333,7 @@ ucs_socket_sendv(int fd, struct iovec *iov, size_t iov_cnt, size_t length);
  *
  * @return UCS_OK on success or an error code on failure.
  */
-ucs_status_t ucs_socket_recv(int fd, void *data, size_t *length);
+ucs_status_t ucs_socket_recv(int fd, void *data, size_t length);
 
 
 /**
