@@ -46,7 +46,7 @@
  * @return UCS_OK if received successfully, or error code otherwise.
  */
 ucs_status_t
-ucs_netlink_send_cmd(int protocol, const void *nl_protocol_hdr,
+ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
                      size_t nl_protocol_hdr_size, char *recv_msg_buf,
                      size_t *recv_msg_buf_len, unsigned short nlmsg_type);
 

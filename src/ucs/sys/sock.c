@@ -645,6 +645,48 @@ ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p
     return ucs_socket_handle_io(fd, iov, iov_cnt, length_p, 1, ret, errno, name);
 }
 
+static size_t calc_total_iov_bytes(const struct iovec *iov, size_t iov_cnt)
+{
+    size_t total_iov_bytes;
+    int i;
+
+    for (i = 0; i < iov_cnt; i++) {
+        total_iov_bytes += iov[i].iov_len;
+    }
+
+    return total_iov_bytes;
+}
+
+static inline ucs_status_t
+ucs_socket_do_iov_b(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p,
+                    ucs_socket_iov_func_t iov_func, const char *name)
+{
+    ucs_status_t ret;
+    ssize_t cur_cnt, total_done = 0;
+    ssize_t bytes_left = calc_total_iov_bytes(iov, iov_cnt);
+
+    do {
+        ret = ucs_socket_do_iov_nb(fd, iov, iov_cnt, length_p, iov_func, name);
+        cur_cnt = *length_p;
+        total_done += cur_cnt;
+        bytes_left -= cur_cnt;
+
+        while (cur_cnt > 0) {
+            if (cur_cnt >= iov[0].iov_len) {
+                cur_cnt -= iov[0].iov_len;
+                iov++;
+                iov_cnt--;
+            } else {
+                iov[0].iov_base = (char *)iov[0].iov_base + cur_cnt;
+                iov[0].iov_len -= cur_cnt;
+                break;
+            }
+        }
+    } while (bytes_left > 0);
+
+    return ret;
+}
+
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p)
 {
     return ucs_socket_do_io_nb(fd, (void*)data, length_p,
@@ -679,6 +721,13 @@ ucs_status_t
 ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p)
 {
     return ucs_socket_do_iov_nb(fd, iov, iov_cnt, length_p, sendmsg, "sendv");
+}
+
+ucs_status_t
+ucs_socket_sendv(int fd, struct iovec *iov, size_t iov_cnt, size_t length)
+{
+    size_t length_cpy = length;
+    return ucs_socket_do_iov_b(fd, iov, iov_cnt, &length_cpy, sendmsg, "sendv");
 }
 
 ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)
