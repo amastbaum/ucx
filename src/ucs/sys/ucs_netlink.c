@@ -52,7 +52,7 @@ ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
     ucs_status_t ret;
     int fd;
     struct nlmsghdr nlh;
-    struct iovec iov[2] = {0};
+    struct iovec iov[2];
 
     ret = ucs_netlink_socket_create(&fd, NETLINK_ROUTE);
     if (ret != UCS_OK) {
@@ -60,6 +60,7 @@ ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
         return ret;
     }
 
+    memset(iov, 0, sizeof(iov));
     nlh.nlmsg_len   = NLMSG_LENGTH(nl_protocol_hdr_size);
     nlh.nlmsg_type  = nlmsg_type;
     nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
