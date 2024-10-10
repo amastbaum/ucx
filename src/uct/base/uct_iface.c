@@ -1142,7 +1142,7 @@ int uct_iface_is_reachable_by_routing(
     char *recv_msg = NULL;
     struct route_info info = {0};
 
-    rtm.rtm_family = info.family;
+    rtm.rtm_family = sa_remote->ss_family;
     rtm.rtm_table  = RT_TABLE_MAIN;
 
     recv_msg_len = NETLINK_MESSAGE_MAX_SIZE;
