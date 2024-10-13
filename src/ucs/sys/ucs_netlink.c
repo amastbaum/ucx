@@ -62,6 +62,7 @@ ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
     }
 
     memset(iov, 0, sizeof(iov));
+    memset(&nlh, 0, sizeof(nlh));
     nlh.nlmsg_len   = send_msg_len;
     nlh.nlmsg_type  = nlmsg_type;
     nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
