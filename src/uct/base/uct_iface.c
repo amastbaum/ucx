@@ -1136,7 +1136,7 @@ int uct_iface_is_reachable_by_routing(
         struct sockaddr_storage *sa_remote)
 {
     ucs_status_t ret;
-    struct rtmsg rtm;
+    struct rtmsg rtm = {0};
     struct nlmsghdr *nlh;
     size_t recv_msg_len;
     char *recv_msg = NULL;
