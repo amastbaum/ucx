@@ -23,7 +23,7 @@
     do { \
         if (nlh->nlmsg_type == NLMSG_ERROR) { \
             ucs_diag("failed to parse netlink message header (%d)", \
-                    ((struct nlmsgerr*)NLMSG_DATA(nlh))->error); \
+                    ((struct nlmsgerr *)NLMSG_DATA(nlh))->error); \
             action; \
         } \
     } while (0)
@@ -34,21 +34,21 @@
  *
  * @param [in]    protocol         The communication protocol to be used
  *                                 (NETLINK_ROUTE, NETLINK_NETFILTER, etc.).
+ * @param [in]    nlmsg_type       Netlink message type (RTM_GETROUTE,
+ *                                 RTM_GETNEIGH, etc.).
  * @param [in]    nl_protocol_hdr  A struct that holds nl protocol specific
  *                                 details and is placed in nlmsghdr.
  * @param [in]    nl_protocol_hdr_size Protocol struct size.
  * @param [out]   recv_msg_buf     The buffer that will hold the received message.
  * @param [inout] recv_msg_buf_len Pointer to the size of the buffer and to
  *                                 store the length of the received message.
- * @param [in]    nlmsg_type       Netlink message type (RTM_GETROUTE,
- *                                 RTM_GETNEIGH, etc.).
  *
  * @return UCS_OK if received successfully, or error code otherwise.
  */
 ucs_status_t
-ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
-                     size_t nl_protocol_hdr_size, char *recv_msg_buf,
-                     size_t *recv_msg_buf_len, unsigned short nlmsg_type);
+ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
+                     void *nl_protocol_hdr, size_t nl_protocol_hdr_size,
+                     char *recv_msg_buf, size_t *recv_msg_buf_len);
 
 
 #endif // UCS_NETLINK_H

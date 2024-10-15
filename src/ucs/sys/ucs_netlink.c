@@ -23,21 +23,22 @@
 
 static ucs_status_t ucs_netlink_socket_create(int *fd, int protocol)
 {
-    ucs_status_t ret;
+    ucs_status_t status;
     struct sockaddr_nl sa = {0};
 
-    ret = ucs_socket_create(AF_NETLINK, SOCK_RAW, protocol, fd);
-    if (ret != UCS_OK) {
-        ucs_diag("failed to create netlink socket %d", ret);
+    status = ucs_socket_create(AF_NETLINK, SOCK_RAW, protocol, fd);
+    if (status != UCS_OK) {
+        ucs_error("failed to create netlink socket %d (%s)",
+                  status, ucs_status_string(status));
         *fd = -1;
-        return ret;
+        return status;
     }
 
     sa.nl_family = AF_NETLINK;
 
     if (bind(*fd, (struct sockaddr*)&sa, sizeof(sa)) < 0) {
         ucs_close_fd(fd);
-        ucs_diag("failed to bind netlink socket %d", *fd);
+        ucs_error("failed to bind netlink socket %d", *fd);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -45,19 +46,19 @@ static ucs_status_t ucs_netlink_socket_create(int *fd, int protocol)
 }
 
 ucs_status_t
-ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
-                     size_t nl_protocol_hdr_size, char *recv_msg_buf,
-                     size_t *recv_msg_buf_len, unsigned short nlmsg_type)
+ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
+                     void *nl_protocol_hdr, size_t nl_protocol_hdr_size,
+                     char *recv_msg_buf, size_t *recv_msg_buf_len)
 {
+    struct nlmsghdr nlh = {0}, *nlh_p;
     ucs_status_t status;
     int fd;
-    struct nlmsghdr nlh;
     struct iovec iov[2];
     size_t dummy;
 
     status = ucs_netlink_socket_create(&fd, protocol);
     if (status != UCS_OK) {
-        ucs_diag("failed to open netlink socket");
+        ucs_error("failed to open netlink socket");
         return status;
     }
 
@@ -65,7 +66,6 @@ ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
     nlh.nlmsg_len   = NLMSG_LENGTH(nl_protocol_hdr_size);
     nlh.nlmsg_type  = nlmsg_type;
     nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
-    nlh.nlmsg_seq   = 1;
     iov[0].iov_base = &nlh;
     iov[0].iov_len  = sizeof(nlh);
     iov[1].iov_base = nl_protocol_hdr;
@@ -76,7 +76,8 @@ ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
     } while (status == UCS_ERR_NO_PROGRESS);
 
     if (status != UCS_OK) {
-        ucs_diag("failed to send netlink message. returned %d", status);
+        ucs_error("failed to send netlink message %d (%s)",
+                  status, ucs_status_string(status));
         goto out;
     }
 
@@ -85,8 +86,17 @@ ucs_netlink_send_cmd(int protocol, void *nl_protocol_hdr,
     } while (status == UCS_ERR_NO_PROGRESS);
 
     if (status != UCS_OK) {
-        ucs_diag("failed to receive route netlink message");
+        ucs_error("failed to receive netlink message");
         goto out;
+    }
+
+    nlh_p = &nlh;
+    ucs_netlink_foreach(nlh_p, recv_msg_buf, recv_msg_buf_len) {
+        if (nlh_p->nlmsg_type == NLMSG_ERROR) {
+            ucs_error("failed to parse netlink message header (%d)",
+                      ((struct nlmsgerr *)NLMSG_DATA(nlh_p))->error);
+            goto out;
+        }
     }
 
 out:

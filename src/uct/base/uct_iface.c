@@ -1121,8 +1121,8 @@ static void parse_nl_route_entry(struct nlmsghdr *nlh, void *arg)
                                             mask.s6_addr[i];
             }
 
-            if (memcmp(&masked_dest, &masked_network,
-                       sizeof(struct in6_addr)) == 0) {
+            if (ucs_bitwise_is_equal(&masked_dest, &masked_network, 
+                                     sizeof(struct in6_addr))) {
                 info->reachable = 1;
             }
         }
@@ -1135,12 +1135,12 @@ int uct_iface_is_reachable_by_routing(
         const uct_iface_is_reachable_params_t *params, const char *iface,
         struct sockaddr_storage *sa_remote)
 {
-    ucs_status_t ret;
     struct rtmsg rtm = {0};
+    struct route_info info = {0};
+    ucs_status_t ret;
     struct nlmsghdr *nlh;
     size_t recv_msg_len;
     char *recv_msg = NULL;
-    struct route_info info = {0};
 
     rtm.rtm_family = sa_remote->ss_family;
     rtm.rtm_table  = RT_TABLE_MAIN;
@@ -1170,8 +1170,8 @@ int uct_iface_is_reachable_by_routing(
         return 0;
     }
 
-    ret = ucs_netlink_send_cmd(NETLINK_ROUTE, &rtm, sizeof(rtm), recv_msg,
-                               &recv_msg_len, RTM_GETROUTE);
+    ret = ucs_netlink_send_cmd(NETLINK_ROUTE, RTM_GETROUTE, &rtm,
+                               sizeof(rtm), recv_msg, &recv_msg_len);
     if (ret != UCS_OK) {
         uct_iface_fill_info_str_buf(
                     params, "failed to send netlink route message (%d)", ret);
@@ -1180,7 +1180,6 @@ int uct_iface_is_reachable_by_routing(
 
     ucs_netlink_foreach(nlh, recv_msg, recv_msg_len) {
         parse_nl_route_entry(nlh, &info);
-        ucs_netlink_handle_parse_error(nlh, goto out);
         if (info.reachable) {
             break;
         }
