@@ -22,7 +22,9 @@
 #include <ucs/time/time.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
+
 #include <linux/rtnetlink.h>
+
 
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
@@ -1050,27 +1052,25 @@ struct route_info {
     int reachable;
 };
 
-static int netlink_get_route_info(int **if_idx, void **dst_in_addr,
-                                  struct rtattr *rta, int len)
+static void netlink_get_route_info(int **if_idx, void **dst_in_addr,
+                                   struct rtattr *rta, int len)
 {
-    *if_idx = NULL;
+    *if_idx      = NULL;
     *dst_in_addr = NULL;
 
     for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
         if (rta->rta_type == RTA_OIF) {
             *if_idx = RTA_DATA(rta);
-        }
-        else if (rta->rta_type == RTA_DST) {
+        } else if (rta->rta_type == RTA_DST) {
             *dst_in_addr = RTA_DATA(rta);
         }
     }
-
-    return 0;
 }
 
 static void create_ipv6_mask(struct in6_addr *mask, unsigned char prefix_len)
 {
     int i;
+
     for (i = 0; i < 16; i++) {
         if (prefix_len >= 8) {
             mask->s6_addr[i] = 0xFF;
@@ -1137,7 +1137,7 @@ int uct_iface_is_reachable_by_routing(
 {
     struct rtmsg rtm = {0};
     struct route_info info = {0};
-    ucs_status_t ret;
+    ucs_status_t status;
     struct nlmsghdr *nlh;
     size_t recv_msg_len;
     char *recv_msg = NULL;
@@ -1170,11 +1170,11 @@ int uct_iface_is_reachable_by_routing(
         return 0;
     }
 
-    ret = ucs_netlink_send_cmd(NETLINK_ROUTE, RTM_GETROUTE, &rtm,
-                               sizeof(rtm), recv_msg, &recv_msg_len);
-    if (ret != UCS_OK) {
+    status = ucs_netlink_send_cmd(NETLINK_ROUTE, RTM_GETROUTE, &rtm,
+                                  sizeof(rtm), recv_msg, &recv_msg_len);
+    if (status != UCS_OK) {
         uct_iface_fill_info_str_buf(
-                    params, "failed to send netlink route message (%d)", ret);
+                    params, "failed to send netlink route message (%d)", status);
         return 0;
     }
 

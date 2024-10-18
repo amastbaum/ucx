@@ -10,10 +10,10 @@
 
 #include "ucs_netlink.h"
 
-#include <ucs/sys/sock.h>
-#include <ucs/sys/compiler.h>
-#include <ucs/type/status.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/compiler.h>
+#include <ucs/sys/sock.h>
+#include <ucs/type/status.h>
 
 #include <errno.h>
 #include <linux/netlink.h>
@@ -21,28 +21,33 @@
 #include <unistd.h>
 
 
-static ucs_status_t ucs_netlink_socket_create(int *fd, int protocol)
+static ucs_status_t ucs_netlink_socket_init(int *fd, int protocol)
 {
-    ucs_status_t status;
     struct sockaddr_nl sa = {0};
+    ucs_status_t status;
 
     status = ucs_socket_create(AF_NETLINK, SOCK_RAW, protocol, fd);
     if (status != UCS_OK) {
         ucs_error("failed to create netlink socket %d (%s)",
                   status, ucs_status_string(status));
-        *fd = -1;
-        return status;
+        goto err;
     }
 
     sa.nl_family = AF_NETLINK;
 
     if (bind(*fd, (struct sockaddr*)&sa, sizeof(sa)) < 0) {
-        ucs_close_fd(fd);
         ucs_error("failed to bind netlink socket %d", *fd);
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto err_close_socket;
     }
 
     return UCS_OK;
+
+err_close_socket:
+    ucs_close_fd(fd);
+err:
+    *fd = -1;
+    return status;
 }
 
 ucs_status_t
@@ -56,7 +61,7 @@ ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
     struct iovec iov[2];
     size_t dummy;
 
-    status = ucs_netlink_socket_create(&fd, protocol);
+    status = ucs_netlink_socket_init(&fd, protocol);
     if (status != UCS_OK) {
         ucs_error("failed to open netlink socket");
         return status;
