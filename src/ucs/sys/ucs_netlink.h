@@ -13,11 +13,13 @@
 #include <stddef.h>
 
 
-#define ucs_netlink_foreach(_elem, _msg, _len) \
-    for (_elem = (struct nlmsghdr *)_msg; \
-         NLMSG_OK(_elem, _len) && (_elem->nlmsg_type != NLMSG_DONE) && \
-         (_elem->nlmsg_type != NLMSG_ERROR); \
-         _elem = NLMSG_NEXT(_elem, _len))
+#define ucs_netlink_foreach(_nlh, _elem, _msg, _len, _msg_hdr_size, _msg_len) \
+    for (_nlh = (struct nlmsghdr *)_msg, _elem = NLMSG_DATA(_nlh), \
+         _msg_len = NLMSG_PAYLOAD((struct nlmsghdr *)_msg, _msg_hdr_size); \
+         NLMSG_OK(_nlh, _len) && (_nlh->nlmsg_type != NLMSG_DONE) && \
+         (_nlh->nlmsg_type != NLMSG_ERROR); \
+         _nlh = NLMSG_NEXT(_nlh, _len), _elem = NLMSG_DATA(_nlh), \
+         _msg_len = NLMSG_PAYLOAD(_nlh, _msg_hdr_size))
 
 
 /**

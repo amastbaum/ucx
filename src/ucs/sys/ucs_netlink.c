@@ -95,8 +95,9 @@ ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
         goto out;
     }
 
-    nlh_p = &nlh;
-    ucs_netlink_foreach(nlh_p, recv_msg_buf, recv_msg_buf_len) {
+    for (nlh_p = (struct nlmsghdr *)recv_msg_buf;
+         NLMSG_OK(nlh_p, recv_msg_buf_len) && (nlh_p->nlmsg_type != NLMSG_DONE);
+         nlh_p = NLMSG_NEXT(nlh_p, recv_msg_buf_len)) {
         if (nlh_p->nlmsg_type == NLMSG_ERROR) {
             ucs_error("failed to parse netlink message header (%d)",
                       ((struct nlmsgerr *)NLMSG_DATA(nlh_p))->error);

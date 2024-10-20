@@ -23,16 +23,6 @@
 #define NETLINK_MESSAGE_MAX_SIZE 8195
 
 
-struct route_info {
-    int if_index;
-    int family;
-
-    union {
-        struct in_addr  ipv4;
-        struct in6_addr ipv6;
-    } remote_addr;
-};
-
 static void ucs_rtnetlink_get_route_info(int **if_idx, void **dst_in_addr,
                                          struct rtattr *rta, int len)
 {
@@ -66,11 +56,10 @@ static void ucs_rtnetlink_create_ipv6_mask(struct in6_addr *mask,
     }
 }
 
-static int ucs_rtnetlink_is_rule_matching(struct nlmsghdr *nlh,
+static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
                                           struct sockaddr_storage *sa_remote,
                                           int oif)
 {
-    struct rtmsg *rtm = NLMSG_DATA(nlh);
     int *rule_iface;
     void *dst_in_addr;
 
@@ -78,7 +67,7 @@ static int ucs_rtnetlink_is_rule_matching(struct nlmsghdr *nlh,
         return 0;
     }
 
-    ucs_rtnetlink_get_route_info(&rule_iface, &dst_in_addr, RTM_RTA(rtm), RTM_PAYLOAD(nlh));
+    ucs_rtnetlink_get_route_info(&rule_iface, &dst_in_addr, RTM_RTA(rtm), rtm_len);
     if (rule_iface == NULL || dst_in_addr == NULL) {
         return 0;
     }
@@ -116,11 +105,11 @@ static int ucs_rtnetlink_is_rule_matching(struct nlmsghdr *nlh,
 
 int ucs_netlink_rule_exists(const char *iface, struct sockaddr_storage *sa_remote)
 {
-    struct rtmsg rtm = {0};
     int rule_exists  = 0;
+    struct rtmsg rtm = {0}, *rtm_p;
     ucs_status_t status;
     struct nlmsghdr *nlh;
-    size_t recv_msg_len;
+    size_t recv_msg_len, entry_len;
     char *recv_msg = NULL;
     int oif;
 
@@ -147,8 +136,9 @@ int ucs_netlink_rule_exists(const char *iface, struct sockaddr_storage *sa_remot
         goto out;
     }
 
-    ucs_netlink_foreach(nlh, recv_msg, recv_msg_len) {
-        if (ucs_rtnetlink_is_rule_matching(nlh, sa_remote, oif)) {
+    ucs_netlink_foreach(nlh, rtm_p, recv_msg, recv_msg_len,
+                        sizeof(struct rtmsg), entry_len) {
+        if (ucs_rtnetlink_is_rule_matching(rtm_p, entry_len, sa_remote, oif)) {
             rule_exists = 1;
             goto out;
         }
