@@ -17,13 +17,12 @@
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/async/async.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/ucs_netlink.h>
+#include <ucs/sys/ucs_rtnetlink.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
-
-#include <linux/rtnetlink.h>
 
 
 const char *uct_ep_operation_names[] = {
@@ -83,8 +82,6 @@ static ucs_stats_class_t uct_iface_stats_class = {
     }
 };
 #endif
-
-#define NETLINK_MESSAGE_MAX_SIZE 8195
 
 
 static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
@@ -1039,158 +1036,22 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
     return 1;
 }
 
-struct route_info {
-    int if_index;
-    int family;
-
-    union {
-        struct in_addr  ipv4;
-        struct in6_addr ipv6;
-    } remote_addr;
-
-    int prefix_len;
-    int reachable;
-};
-
-static void netlink_get_route_info(int **if_idx, void **dst_in_addr,
-                                   struct rtattr *rta, int len)
-{
-    *if_idx      = NULL;
-    *dst_in_addr = NULL;
-
-    for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
-        if (rta->rta_type == RTA_OIF) {
-            *if_idx = RTA_DATA(rta);
-        } else if (rta->rta_type == RTA_DST) {
-            *dst_in_addr = RTA_DATA(rta);
-        }
-    }
-}
-
-static void create_ipv6_mask(struct in6_addr *mask, unsigned char prefix_len)
-{
-    int i;
-
-    for (i = 0; i < 16; i++) {
-        if (prefix_len >= 8) {
-            mask->s6_addr[i] = 0xFF;
-            prefix_len      -= 8;
-        } else if (prefix_len > 0) {
-            mask->s6_addr[i] = (0xFF00 >> prefix_len) & 0xFF;
-            prefix_len       = 0;
-        } else {
-            mask->s6_addr[i] = 0;
-        }
-    }
-}
-
-static void parse_nl_route_entry(struct nlmsghdr *nlh, void *arg)
-{
-    struct route_info *info = (struct route_info*)arg;
-    struct rtmsg *rtm       = NLMSG_DATA(nlh);
-    int *oif;
-    void *dst_in_addr;
-
-    if (rtm->rtm_family != info->family) {
-        return;
-    }
-
-    netlink_get_route_info(&oif, &dst_in_addr, RTM_RTA(rtm), RTM_PAYLOAD(nlh));
-    if (oif == NULL || dst_in_addr == NULL) {
-        return;
-    }
-
-    if (*oif == info->if_index) {
-        if (info->family == AF_INET) {
-            struct in_addr *addr = (struct in_addr *)dst_in_addr;
-            uint32_t mask = UCS_MASK(rtm->rtm_dst_len);
-            if ((info->remote_addr.ipv4.s_addr & mask) ==
-                (addr->s_addr & mask)) {
-                info->reachable = 1;
-            }
-        } else { /* AF_INET6 */
-            int i;
-            struct in6_addr *network_addr = (struct in6_addr *)dst_in_addr;
-            struct in6_addr *dest = (struct in6_addr *)&info->remote_addr.ipv6;
-            struct in6_addr mask, masked_dest, masked_network;
-            create_ipv6_mask(&mask, rtm->rtm_dst_len);
-
-            for (i = 0; i < 16; i++) {
-                masked_dest.s6_addr[i]    = dest->s6_addr[i] & mask.s6_addr[i];
-                masked_network.s6_addr[i] = network_addr->s6_addr[i] &
-                                            mask.s6_addr[i];
-            }
-
-            if (ucs_bitwise_is_equal(&masked_dest, &masked_network, 
-                                     sizeof(struct in6_addr))) {
-                info->reachable = 1;
-            }
-        }
-    }
-
-    info->prefix_len = rtm->rtm_dst_len;
-}
-
 int uct_iface_is_reachable_by_routing(
         const uct_iface_is_reachable_params_t *params, const char *iface,
         struct sockaddr_storage *sa_remote)
 {
-    struct rtmsg rtm = {0};
-    struct route_info info = {0};
-    ucs_status_t status;
-    struct nlmsghdr *nlh;
-    size_t recv_msg_len;
-    char *recv_msg = NULL;
+    char ip_str[128];
 
-    rtm.rtm_family = sa_remote->ss_family;
-    rtm.rtm_table  = RT_TABLE_MAIN;
-
-    recv_msg_len = NETLINK_MESSAGE_MAX_SIZE;
-    recv_msg     = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
-    if (recv_msg == NULL) {
+    if (!ucs_netlink_rule_exists(iface, sa_remote)) {
         uct_iface_fill_info_str_buf(
-                    params,
-                    "failed to allocate a buffer for netlink receive message");
-        return UCS_ERR_NO_MEMORY;
-    }
+                params,
+                "remote address %s is not routable",
+                ucs_sockaddr_str((struct sockaddr *)&sa_remote, ip_str, 128));
 
-    info.family = sa_remote->ss_family;
-    if (info.family == AF_INET) {
-        info.remote_addr.ipv4 = ((struct sockaddr_in*)sa_remote)->sin_addr;
-    } else if (info.family == AF_INET6) {
-        info.remote_addr.ipv6 = ((struct sockaddr_in6*)sa_remote)->sin6_addr;
-    } else {
-        uct_iface_fill_info_str_buf(params, "unsupported address family");
         return 0;
     }
 
-    info.if_index = if_nametoindex(iface);
-    if (info.if_index == 0) {
-        uct_iface_fill_info_str_buf(params, "failed to get interface index");
-        return 0;
-    }
-
-    status = ucs_netlink_send_cmd(NETLINK_ROUTE, RTM_GETROUTE, &rtm,
-                                  sizeof(rtm), recv_msg, &recv_msg_len);
-    if (status != UCS_OK) {
-        uct_iface_fill_info_str_buf(
-                    params, "failed to send netlink route message (%d)", status);
-        return 0;
-    }
-
-    ucs_netlink_foreach(nlh, recv_msg, recv_msg_len) {
-        parse_nl_route_entry(nlh, &info);
-        if (info.reachable) {
-            break;
-        }
-    }
-
-out:
-    if (recv_msg != NULL) {
-        free(recv_msg);
-    }
-
-    return info.reachable;
+    return 1;
 }
 
 void uct_iface_mpool_config_copy(ucs_mpool_params_t *mp_params,
