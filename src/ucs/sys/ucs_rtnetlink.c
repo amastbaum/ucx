@@ -44,30 +44,13 @@ static void ucs_rtnetlink_get_route_info(int **if_idx, void **dst_in_addr,
     }
 }
 
-static void ucs_rtnetlink_create_ipv6_mask(struct in6_addr *mask,
-                                           unsigned char prefix_len)
-{
-    int i;
-
-    for (i = 0; i < 16; i++) {
-        if (prefix_len >= 8) {
-            mask->s6_addr[i] = 0xFF;
-            prefix_len      -= 8;
-        } else if (prefix_len > 0) {
-            mask->s6_addr[i] = (0xFF00 >> prefix_len) & 0xFF;
-            prefix_len       = 0;
-        } else {
-            mask->s6_addr[i] = 0;
-        }
-    }
-}
-
 static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
                                           struct sockaddr_storage *sa_remote,
                                           int oif)
 {
     int  *rule_iface;
     void *dst_in_addr;
+    void *remote_addr;
 
     if (rtm->rtm_family != sa_remote->ss_family) {
         return 0;
@@ -80,29 +63,13 @@ static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
 
     if (*rule_iface == oif) {
         if (sa_remote->ss_family == AF_INET) {
-            struct in_addr *addr = (struct in_addr *)dst_in_addr;
-            uint32_t mask = UCS_MASK(rtm->rtm_dst_len);
-            if ((((struct sockaddr_in *)sa_remote)->sin_addr.s_addr & mask) ==
-                (addr->s_addr & mask)) {
-                return 1;
-            }
+            remote_addr = &((struct sockaddr_in *)sa_remote)->sin_addr;
         } else { /* AF_INET6 */
-            int i;
-            struct in6_addr *addr = (struct in6_addr *)dst_in_addr;
-            struct in6_addr *dest = &((struct sockaddr_in6 *)sa_remote)->sin6_addr;
-            struct in6_addr mask, masked_dest, masked_network;
-            ucs_rtnetlink_create_ipv6_mask(&mask, rtm->rtm_dst_len);
+            remote_addr = &((struct sockaddr_in6 *)sa_remote)->sin6_addr;
+        }
 
-            for (i = 0; i < 16; i++) {
-                masked_dest.s6_addr[i]    = dest->s6_addr[i] & mask.s6_addr[i];
-                masked_network.s6_addr[i] = addr->s6_addr[i] &
-                                            mask.s6_addr[i];
-            }
-
-            if (ucs_bitwise_is_equal(&masked_dest, &masked_network, 
-                                     sizeof(struct in6_addr))) {
-                return 1;
-            }
+        if (ucs_bitwise_is_equal(remote_addr, dst_in_addr, rtm->rtm_dst_len)) {
+            return 1;
         }
     }
 
