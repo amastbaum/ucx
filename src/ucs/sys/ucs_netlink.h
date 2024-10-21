@@ -28,8 +28,8 @@ BEGIN_C_DECLS
  *         is not an error), or an error code if an error occurred during parsing.
  *
  */
-typedef ucs_status_t
-(*ucs_netlink_parse_cb_t)(struct nlmsghdr *nlh, void *nl_msg, void *arg);
+typedef ucs_status_t (*ucs_netlink_parse_cb_t)(struct nlmsghdr *nlh,
+                                               void *nl_msg, void *arg);
 
 
 /**
@@ -49,10 +49,10 @@ typedef ucs_status_t
  *
  * @return UCS_OK if received successfully, or error code otherwise.
  */
-ucs_status_t
-ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
-                     void *nl_protocol_hdr, size_t nl_protocol_hdr_size,
-                     char *recv_msg_buf, size_t *recv_msg_buf_len);
+ucs_status_t ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
+                                  void *nl_protocol_hdr,
+                                  size_t nl_protocol_hdr_size,
+                                  char *recv_msg_buf, size_t *recv_msg_buf_len);
 
 
 /**
@@ -66,9 +66,8 @@ ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
  *
  * @return UCS_OK if parsed successfully, or error code otherwise.
  */
-ucs_status_t
-ucs_netlink_parse_msg(void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg);
+ucs_status_t ucs_netlink_parse_msg(void *msg, size_t msg_len,
+                                   ucs_netlink_parse_cb_t parse_cb, void *arg);
 
 
 /**

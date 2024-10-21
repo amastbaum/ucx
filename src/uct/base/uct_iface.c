@@ -1044,9 +1044,8 @@ int uct_iface_is_reachable_by_routing(
 
     if (!ucs_netlink_rule_exists(iface, sa_remote)) {
         uct_iface_fill_info_str_buf(
-                params,
-                "remote address %s is not routable",
-                ucs_sockaddr_str((struct sockaddr *)&sa_remote, ip_str, 128));
+                params, "remote address %s is not routable",
+                ucs_sockaddr_str((struct sockaddr*)&sa_remote, ip_str, 128));
 
         return 0;
     }
