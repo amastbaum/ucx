@@ -22,6 +22,12 @@
 
 #define NETLINK_MESSAGE_MAX_SIZE 8195
 
+struct route_info {
+    struct sockaddr_storage *sa_remote;
+    int if_index;
+    int matching;
+};
+
 
 static void ucs_rtnetlink_get_route_info(int **if_idx, void **dst_in_addr,
                                          struct rtattr *rta, int len)
@@ -60,7 +66,7 @@ static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
                                           struct sockaddr_storage *sa_remote,
                                           int oif)
 {
-    int *rule_iface;
+    int  *rule_iface;
     void *dst_in_addr;
 
     if (rtm->rtm_family != sa_remote->ss_family) {
@@ -103,14 +109,26 @@ static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
     return 0;
 }
 
+ucs_status_t
+ucs_rtnetlink_parse_entry(struct nlmsghdr *nlh, void *nl_msg, void *arg)
+{
+    struct route_info *info = (struct route_info *)arg;
+    if (ucs_rtnetlink_is_rule_matching((struct rtmsg *)nl_msg, RTM_PAYLOAD(nlh),
+                                       info->sa_remote, info->if_index)) {
+        info->matching = 1;
+        return UCS_OK;
+    }
+
+    return UCS_INPROGRESS;
+}
+
 int ucs_netlink_rule_exists(const char *iface, struct sockaddr_storage *sa_remote)
 {
-    int rule_exists  = 0;
-    struct rtmsg rtm = {0}, *rtm_p;
+    char *recv_msg         = NULL;
+    struct route_info info = {0};
+    struct rtmsg rtm       = {0};
     ucs_status_t status;
-    struct nlmsghdr *nlh;
-    size_t recv_msg_len, entry_len;
-    char *recv_msg = NULL;
+    size_t recv_msg_len;
     int oif;
 
     rtm.rtm_family = sa_remote->ss_family;
@@ -136,12 +154,14 @@ int ucs_netlink_rule_exists(const char *iface, struct sockaddr_storage *sa_remot
         goto out;
     }
 
-    ucs_netlink_foreach(nlh, rtm_p, recv_msg, recv_msg_len,
-                        sizeof(struct rtmsg), entry_len) {
-        if (ucs_rtnetlink_is_rule_matching(rtm_p, entry_len, sa_remote, oif)) {
-            rule_exists = 1;
-            goto out;
-        }
+    info.if_index  = oif;
+    info.sa_remote = sa_remote;
+
+    status = ucs_netlink_parse_msg(recv_msg, recv_msg_len,
+                                   ucs_rtnetlink_parse_entry, &info);
+    if (status != UCS_OK) {
+        ucs_error("failed to parse netlink route message (%d)", status);
+        goto out;
     }
 
 out:
@@ -149,5 +169,5 @@ out:
         free(recv_msg);
     }
 
-    return rule_exists;
+    return info.matching;
 }

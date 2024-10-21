@@ -55,7 +55,7 @@ ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
                      void *nl_protocol_hdr, size_t nl_protocol_hdr_size,
                      char *recv_msg_buf, size_t *recv_msg_buf_len)
 {
-    struct nlmsghdr nlh = {0}, *nlh_p;
+    struct nlmsghdr nlh = {0};
     ucs_status_t status;
     int fd;
     struct iovec iov[2];
@@ -95,17 +95,30 @@ ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
         goto out;
     }
 
-    for (nlh_p = (struct nlmsghdr *)recv_msg_buf;
-         NLMSG_OK(nlh_p, recv_msg_buf_len) && (nlh_p->nlmsg_type != NLMSG_DONE);
-         nlh_p = NLMSG_NEXT(nlh_p, recv_msg_buf_len)) {
-        if (nlh_p->nlmsg_type == NLMSG_ERROR) {
-            ucs_error("failed to parse netlink message header (%d)",
-                      ((struct nlmsgerr *)NLMSG_DATA(nlh_p))->error);
-            goto out;
-        }
-    }
-
 out:
     ucs_close_fd(&fd);
     return status;
+}
+
+ucs_status_t
+ucs_netlink_parse_msg(void *msg, size_t msg_len,
+                      ucs_netlink_parse_cb_t parse_cb, void *arg)
+{
+    struct nlmsghdr *nlh;
+    ucs_status_t status = UCS_INPROGRESS;
+
+    for (nlh = (struct nlmsghdr *)msg;
+         (status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
+         (nlh->nlmsg_type != NLMSG_DONE) && (nlh->nlmsg_type != NLMSG_ERROR);
+         nlh = NLMSG_NEXT(nlh, msg_len)) {
+        status = parse_cb(nlh, NLMSG_DATA(nlh), arg);
+    }
+
+    if (nlh->nlmsg_type == NLMSG_ERROR) {
+        struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
+        ucs_error("failed to parse netlink message header (%d)", err->error);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
 }

@@ -12,14 +12,23 @@
 #include <linux/netlink.h>
 #include <stddef.h>
 
+BEGIN_C_DECLS
 
-#define ucs_netlink_foreach(_nlh, _elem, _msg, _len, _msg_hdr_size, _msg_len) \
-    for (_nlh = (struct nlmsghdr *)_msg, _elem = NLMSG_DATA(_nlh), \
-         _msg_len = NLMSG_PAYLOAD((struct nlmsghdr *)_msg, _msg_hdr_size); \
-         NLMSG_OK(_nlh, _len) && (_nlh->nlmsg_type != NLMSG_DONE) && \
-         (_nlh->nlmsg_type != NLMSG_ERROR); \
-         _nlh = NLMSG_NEXT(_nlh, _len), _elem = NLMSG_DATA(_nlh), \
-         _msg_len = NLMSG_PAYLOAD(_nlh, _msg_hdr_size))
+
+/**
+ * Callback function for parsing individual netlink messages.
+ *
+ * @param [in] nlh    Pointer to the netlink message header.
+ * @param [in] nl_msg Pointer to the netlink message payload.
+ * @param [in] arg    User-provided argument passed through from the caller.
+ *
+ * @return UCS_INPROGRESS if parsing should continue to the next message,
+ *         UCS_OK if parsing is complete or should stop for any reason (which
+ *         is not an error), or an error code if an error occurred during parsing.
+ *
+ */
+typedef ucs_status_t
+(*ucs_netlink_parse_cb_t)(struct nlmsghdr *nlh, void *nl_msg, void *arg);
 
 
 /**
@@ -44,5 +53,22 @@ ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
                      void *nl_protocol_hdr, size_t nl_protocol_hdr_size,
                      char *recv_msg_buf, size_t *recv_msg_buf_len);
 
+
+/**
+ * Iterates over the netlink headers and parses each one of them
+ * using a callback function provided by the caller.
+ *
+ * @param [in]    msg       Pointer to the full netlink message.
+ * @param [in]    msg_len   Length of the netlink message in bytes.
+ * @param [in]    parse_cb  The callback function to parse each sub-message (entry).
+ * @param [in]    arg       Pointer to the callback function arguments.
+ *
+ * @return UCS_OK if parsed successfully, or error code otherwise.
+ */
+ucs_status_t
+ucs_netlink_parse_msg(void *msg, size_t msg_len,
+                      ucs_netlink_parse_cb_t parse_cb, void *arg);
+
+END_C_DECLS
 
 #endif /* UCS_NETLINK_H */
