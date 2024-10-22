@@ -23,6 +23,7 @@
 #include <ucs/type/serialize.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
+#include <ucs/sys/ucs_netlink.h>
 #include <ucs/sys/sock.h>
 #include <string.h>
 #include <stdlib.h>
@@ -735,8 +736,14 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     }
 
     if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ROUTE) {
-        return uct_iface_is_reachable_by_routing(params, ndev_name,
-                                                 (struct sockaddr*)&sa_remote);
+        if (!ucs_netlink_rule_exists(ndev_name, (struct sockaddr*)&sa_remote)) {
+            uct_iface_fill_info_str_buf(
+               params, "remote address %s is not routable",
+               ucs_sockaddr_str((struct sockaddr*)&sa_remote, remote_str, 128));
+            return 0;
+        }
+
+        return 1;
     }
 
     /* check for zero-sized netmask */
@@ -1361,7 +1368,7 @@ uct_ib_iface_init_roce_addr_prefix(uct_ib_iface_t *iface,
 
     if ((gid_info->roce_info.ver != UCT_IB_DEVICE_ROCE_V2) ||
         (!config->rocev2_local_subnet &&
-         config->reachability_mode != UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET)) {
+        (config->reachability_mode != UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET))) {
         iface->addr_prefix_bits = 0;
         return UCS_OK;
     }

@@ -244,6 +244,5 @@ int ucs_netlink_rule_exists(const char *iface,
 
 out:
     ucs_free(recv_msg);
-
     return info.matching;
 }
