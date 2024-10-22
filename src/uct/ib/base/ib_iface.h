@@ -127,7 +127,6 @@ enum {
     UCT_IB_IFACE_STAT_LAST
 };
 
-
 typedef struct uct_ib_address_pack_params {
     /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
     uint64_t                          flags;

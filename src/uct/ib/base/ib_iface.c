@@ -1368,11 +1368,9 @@ uct_ib_iface_init_roce_addr_prefix(uct_ib_iface_t *iface,
 
     /* Override the original value of reachability_mode if
        rocev2_local_subnet is enabled to maintain backward compatibility */
-    if (config->rocev2_local_subnet) {
-        iface->config.reachability_mode = UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET;
-    } else {
-        iface->config.reachability_mode = config->reachability_mode;
-    }
+    iface->config.reachability_mode = config->rocev2_local_subnet ?
+                                      UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET :
+                                      config->reachability_mode;
 
     status = ucs_sockaddr_inet_addr_size(gid_info->roce_info.addr_family,
                                          &addr_size);
