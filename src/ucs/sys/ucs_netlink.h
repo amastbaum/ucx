@@ -80,7 +80,7 @@ ucs_status_t ucs_netlink_parse_msg(void *msg, size_t msg_len,
  * @return 1 if such rule exists, or 0 otherwise.
  */
 int ucs_netlink_rule_exists(const char *iface,
-                            struct sockaddr_storage *sa_remote);
+                            const struct sockaddr *sa_remote);
 
 
 END_C_DECLS

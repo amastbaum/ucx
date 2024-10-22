@@ -34,7 +34,7 @@ static ucs_status_t ucs_netlink_socket_init(int *fd, int protocol)
 
     status = ucs_socket_create(AF_NETLINK, SOCK_RAW, protocol, fd);
     if (status != UCS_OK) {
-        ucs_error("failed to create netlink socket %d (%s)", status,
+        ucs_error("failed to create netlink socket (%s)",
                   ucs_status_string(status));
         goto err;
     }
@@ -69,11 +69,9 @@ ucs_status_t ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
 
     status = ucs_netlink_socket_init(&fd, protocol);
     if (status != UCS_OK) {
-        ucs_error("failed to open netlink socket");
         return status;
     }
 
-    memset(&nlh, 0, sizeof(nlh));
     nlh.nlmsg_len   = NLMSG_LENGTH(nl_protocol_hdr_size);
     nlh.nlmsg_type  = nlmsg_type;
     nlh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
@@ -87,7 +85,7 @@ ucs_status_t ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
     } while (status == UCS_ERR_NO_PROGRESS);
 
     if (status != UCS_OK) {
-        ucs_error("failed to send netlink message %d (%s)", status,
+        ucs_error("failed to send netlink message (%s)",
                   ucs_status_string(status));
         goto out;
     }
@@ -136,9 +134,9 @@ ucs_status_t ucs_netlink_parse_msg(void *msg, size_t msg_len,
 #define NETLINK_MESSAGE_MAX_SIZE 8195
 
 struct route_info {
-    struct sockaddr_storage *sa_remote;
-    int                     if_index;
-    int                     matching;
+    const struct sockaddr *sa_remote;
+    int                    if_index;
+    int                    matching;
 };
 
 
@@ -158,14 +156,13 @@ static void ucs_rtnetlink_get_route_info(int **if_idx, void **dst_in_addr,
 }
 
 static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
-                                          struct sockaddr_storage *sa_remote,
-                                          int oif)
+                                          const struct sockaddr *sa_remote,
+                                          int iface_index)
 {
     int *rule_iface;
     void *dst_in_addr;
-    void *remote_addr;
 
-    if (rtm->rtm_family != sa_remote->ss_family) {
+    if (rtm->rtm_family != sa_remote->sa_family) {
         return 0;
     }
 
@@ -175,25 +172,19 @@ static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
         return 0;
     }
 
-    if (*rule_iface == oif) {
-        if (sa_remote->ss_family == AF_INET) {
-            remote_addr = &((struct sockaddr_in*)sa_remote)->sin_addr;
-        } else { /* AF_INET6 */
-            remote_addr = &((struct sockaddr_in6*)sa_remote)->sin6_addr;
-        }
-
-        if (ucs_bitwise_is_equal(remote_addr, dst_in_addr, rtm->rtm_dst_len)) {
-            return 1;
-        }
+    if (*rule_iface != iface_index) {
+        return 0;
     }
 
-    return 0;
+    return ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(sa_remote),
+                             dst_in_addr, rtm->rtm_dst_len);
 }
 
 ucs_status_t
-ucs_rtnetlink_parse_entry(struct nlmsghdr *nlh, void *nl_msg, void *arg)
+ucs_netlink_parse_rt_entry_cb(struct nlmsghdr *nlh, void *nl_msg, void *arg)
 {
     struct route_info *info = (struct route_info*)arg;
+
     if (ucs_rtnetlink_is_rule_matching((struct rtmsg*)nl_msg, RTM_PAYLOAD(nlh),
                                        info->sa_remote, info->if_index)) {
         info->matching = 1;
@@ -204,16 +195,16 @@ ucs_rtnetlink_parse_entry(struct nlmsghdr *nlh, void *nl_msg, void *arg)
 }
 
 int ucs_netlink_rule_exists(const char *iface,
-                            struct sockaddr_storage *sa_remote)
+                            const struct sockaddr *sa_remote)
 {
     char *recv_msg         = NULL;
     struct route_info info = {0};
     struct rtmsg rtm       = {0};
     ucs_status_t status;
     size_t recv_msg_len;
-    int oif;
+    int iface_index;
 
-    rtm.rtm_family = sa_remote->ss_family;
+    rtm.rtm_family = sa_remote->sa_family;
     rtm.rtm_table  = RT_TABLE_MAIN;
 
     recv_msg_len = NETLINK_MESSAGE_MAX_SIZE;
@@ -226,29 +217,31 @@ int ucs_netlink_rule_exists(const char *iface,
     status = ucs_netlink_send_cmd(NETLINK_ROUTE, RTM_GETROUTE, &rtm,
                                   sizeof(rtm), recv_msg, &recv_msg_len);
     if (status != UCS_OK) {
-        ucs_error("failed to send netlink route message (%d)", status);
+        ucs_error("failed to send netlink route message (%s)",
+                  ucs_status_string(status));
         goto out;
     }
 
-    oif = if_nametoindex(iface);
-    if (oif == 0) {
+    iface_index = if_nametoindex(iface);
+    if (iface_index == 0) {
         ucs_error("failed to get interface index");
         goto out;
     }
 
-    info.if_index  = oif;
+    info.if_index  = iface_index;
     info.sa_remote = sa_remote;
 
     status = ucs_netlink_parse_msg(recv_msg, recv_msg_len,
-                                   ucs_rtnetlink_parse_entry, &info);
+                                   ucs_netlink_parse_rt_entry_cb, &info);
     if (status != UCS_OK) {
-        ucs_error("failed to parse netlink route message (%d)", status);
+        ucs_error("failed to parse netlink route message (%s)",
+                  ucs_status_string(status));
         goto out;
     }
 
 out:
     if (recv_msg != NULL) {
-        free(recv_msg);
+        ucs_free(recv_msg);
     }
 
     return info.matching;

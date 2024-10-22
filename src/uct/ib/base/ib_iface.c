@@ -735,7 +735,8 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     }
 
     if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ROUTE) {
-        return uct_iface_is_reachable_by_routing(params, ndev_name, &sa_remote);
+        return uct_iface_is_reachable_by_routing(params, ndev_name,
+                                                 (struct sockaddr*)&sa_remote);
     }
 
     /* check for zero-sized netmask */
