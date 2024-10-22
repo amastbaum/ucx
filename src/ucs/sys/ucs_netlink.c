@@ -140,39 +140,46 @@ struct route_info {
 };
 
 
-static void ucs_rtnetlink_get_route_info(int **if_idx, void **dst_in_addr,
-                                         struct rtattr *rta, int len)
+static ucs_status_t ucs_rtnetlink_get_route_info(int *if_idx, void **dst_in_addr,
+                                                 struct rtattr *rta, int len)
 {
-    *if_idx      = NULL;
+    *if_idx      = -1;
     *dst_in_addr = NULL;
 
     for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
         if (rta->rta_type == RTA_OIF) {
-            *if_idx = RTA_DATA(rta);
+            *if_idx = *((int*)RTA_DATA(rta));
         } else if (rta->rta_type == RTA_DST) {
             *dst_in_addr = RTA_DATA(rta);
         }
     }
+
+    if ((*if_idx == -1) || (*dst_in_addr == NULL)) {
+        ucs_debug("either iface index or dest address are missing "
+                  "in the routing table entry");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
 }
 
 static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
                                           const struct sockaddr *sa_remote,
                                           int iface_index)
 {
-    int *rule_iface;
+    int   rule_iface;
     void *dst_in_addr;
 
     if (rtm->rtm_family != sa_remote->sa_family) {
         return 0;
     }
 
-    ucs_rtnetlink_get_route_info(&rule_iface, &dst_in_addr, RTM_RTA(rtm),
-                                 rtm_len);
-    if (rule_iface == NULL || dst_in_addr == NULL) {
+    if (ucs_rtnetlink_get_route_info(&rule_iface, &dst_in_addr, RTM_RTA(rtm),
+                                     rtm_len) != UCS_OK) {
         return 0;
     }
 
-    if (*rule_iface != iface_index) {
+    if (rule_iface != iface_index) {
         return 0;
     }
 
