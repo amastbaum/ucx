@@ -140,8 +140,8 @@ struct ucs_netlink_route_info_t {
 };
 
 
-static ucs_status_t ucs_rtnetlink_get_route_info(int *if_idx, void **dst_in_addr,
-                                                 struct rtattr *rta, int len)
+static ucs_status_t ucs_rtnetlink_get_route_info(struct rtattr *rta, int len,
+                                                 int *if_idx, void **dst_in_addr)
 {
     *if_idx      = -1;
     *dst_in_addr = NULL;
@@ -170,8 +170,8 @@ static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
     int   rule_iface;
     void *dst_in_addr;
 
-    if (ucs_rtnetlink_get_route_info(&rule_iface, &dst_in_addr, RTM_RTA(rtm),
-                                     rtm_len) != UCS_OK) {
+    if (ucs_rtnetlink_get_route_info(RTM_RTA(rtm), rtm_len, &rule_iface,
+                                     &dst_in_addr) != UCS_OK) {
         return 0;
     }
 
