@@ -183,7 +183,7 @@ static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
                              dst_in_addr, rtm->rtm_dst_len);
 }
 
-ucs_status_t
+static ucs_status_t
 ucs_netlink_parse_rt_entry_cb(struct nlmsghdr *nlh, void *nl_msg, void *arg)
 {
     struct ucs_netlink_route_info_t *info = (struct ucs_netlink_route_info_t*)arg;
@@ -197,7 +197,7 @@ ucs_netlink_parse_rt_entry_cb(struct nlmsghdr *nlh, void *nl_msg, void *arg)
     return UCS_INPROGRESS;
 }
 
-int ucs_netlink_rule_exists(const char *iface,
+int ucs_netlink_rule_exists(const char *iface_name,
                             const struct sockaddr *sa_remote)
 {
     char *recv_msg                       = NULL;
@@ -225,7 +225,7 @@ int ucs_netlink_rule_exists(const char *iface,
         goto out;
     }
 
-    iface_index = if_nametoindex(iface);
+    iface_index = if_nametoindex(iface_name);
     if (iface_index == 0) {
         ucs_error("failed to get interface index");
         goto out;
