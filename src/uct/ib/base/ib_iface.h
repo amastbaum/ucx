@@ -216,7 +216,7 @@ struct uct_ib_iface_config {
     /* Length of subnet prefix for reachability check */
     unsigned long                    rocev2_subnet_pfx_len;
 
-    /* The mode used for performing the reachability check */
+    /* Mode used for performing reachability check */
     uct_ib_iface_reachability_mode_t reachability_mode;
 
     /* List of included/excluded subnets to filter RoCE GID entries by */

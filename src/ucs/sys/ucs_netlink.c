@@ -22,17 +22,15 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define NETLINK_MESSAGE_MAX_SIZE 8195
 
-/* *******************************************************
- * General Netlink utilities                             *
- * ***************************************************** */
 
-static ucs_status_t ucs_netlink_socket_init(int *fd, int protocol)
+static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
     struct sockaddr_nl sa = {0};
     ucs_status_t status;
 
-    status = ucs_socket_create(AF_NETLINK, SOCK_RAW, protocol, fd);
+    status = ucs_socket_create(AF_NETLINK, SOCK_RAW, protocol, fd_p);
     if (status != UCS_OK) {
         ucs_error("failed to create netlink socket (%s)",
                   ucs_status_string(status));
@@ -41,8 +39,8 @@ static ucs_status_t ucs_netlink_socket_init(int *fd, int protocol)
 
     sa.nl_family = AF_NETLINK;
 
-    if (bind(*fd, (struct sockaddr*)&sa, sizeof(sa)) < 0) {
-        ucs_error("failed to bind netlink socket %d", *fd);
+    if (bind(*fd_p, (struct sockaddr*)&sa, sizeof(sa)) < 0) {
+        ucs_error("failed to bind netlink socket %d", *fd_p);
         status = UCS_ERR_IO_ERROR;
         goto err_close_socket;
     }
@@ -50,9 +48,8 @@ static ucs_status_t ucs_netlink_socket_init(int *fd, int protocol)
     return UCS_OK;
 
 err_close_socket:
-    ucs_close_fd(fd);
+    ucs_close_fd(fd_p);
 err:
-    *fd = -1;
     return status;
 }
 
@@ -65,7 +62,7 @@ ucs_status_t ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
     ucs_status_t status;
     int fd;
     struct iovec iov[2];
-    size_t dummy;
+    size_t bytes_sent;
 
     status = ucs_netlink_socket_init(&fd, protocol);
     if (status != UCS_OK) {
@@ -81,7 +78,7 @@ ucs_status_t ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
     iov[1].iov_len  = nl_protocol_hdr_size;
 
     do {
-        status = ucs_socket_sendv_nb(fd, iov, 2, &dummy);
+        status = ucs_socket_sendv_nb(fd, iov, 2, &bytes_sent);
     } while (status == UCS_ERR_NO_PROGRESS);
 
     if (status != UCS_OK) {
@@ -107,31 +104,24 @@ out:
 ucs_status_t ucs_netlink_parse_msg(void *msg, size_t msg_len,
                                    ucs_netlink_parse_cb_t parse_cb, void *arg)
 {
-    struct nlmsghdr *nlh;
     ucs_status_t status = UCS_INPROGRESS;
+    struct nlmsghdr *nlh;
 
     for (nlh = (struct nlmsghdr*)msg;
          (status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-         (nlh->nlmsg_type != NLMSG_DONE) && (nlh->nlmsg_type != NLMSG_ERROR);
+         nlh->nlmsg_type != NLMSG_DONE;
          nlh = NLMSG_NEXT(nlh, msg_len)) {
-        status = parse_cb(nlh, NLMSG_DATA(nlh), arg);
-    }
+        if (nlh->nlmsg_type == NLMSG_ERROR) {
+            struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
+            ucs_error("failed to parse netlink message header (%d)", err->error);
+            return UCS_ERR_IO_ERROR;
+        }
 
-    if (nlh->nlmsg_type == NLMSG_ERROR) {
-        struct nlmsgerr *err = (struct nlmsgerr*)NLMSG_DATA(nlh);
-        ucs_error("failed to parse netlink message header (%d)", err->error);
-        return UCS_ERR_IO_ERROR;
+        status = parse_cb(nlh, NLMSG_DATA(nlh), arg);
     }
 
     return UCS_OK;
 }
-
-
-/* *******************************************************
- * Route Netlink utilities                               *
- * ***************************************************** */
-
-#define NETLINK_MESSAGE_MAX_SIZE 8195
 
 struct ucs_netlink_route_info_t {
     const struct sockaddr *sa_remote;

@@ -43,7 +43,7 @@ const char *uct_ib_mtu_values[] = {
     [UCT_IB_MTU_LAST]       = NULL
 };
 
-const char *uct_ib_reachability_mode[] = {
+const char *uct_ib_reachability_modes[] = {
     [UCT_IB_REACHABILITY_MODE_ROUTE]        = "route",
     [UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET] = "local_subnet",
     [UCT_IB_REACHABILITY_MODE_NONE]         = "none",
@@ -193,8 +193,8 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "The mode used for performing the reachability check\n"
    " - route        - all routable addresses will be assumed as reachable\n"
    " - local_subnet - only addresses within the interface's subnet will be assumed as reachable.\n"
-   " - none         - no reachability check will be done. all addresses are reachable",
-   ucs_offsetof(uct_ib_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_mode)},
+   " - none         - all addresses are assumed as reachable, without any check",
+   ucs_offsetof(uct_ib_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_modes)},
 
   {"ROCE_PATH_FACTOR", "1",
    "Multiplier for RoCE LAG UDP source port calculation. The UDP source port\n"
@@ -676,13 +676,11 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     char ndev_name[IFNAMSIZ];
     ucs_status_t status;
 
-    if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_NONE) {
-        return 1;
-    }
-
-    /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases) */
+    /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases)
+       or for reachability mode 'none' (no reachibility check is needed) */
     if ((uct_ib_address_flags_get_roce_version(remote_ib_addr_flags)) ==
-         UCT_IB_DEVICE_ROCE_ANY) {
+         UCT_IB_DEVICE_ROCE_ANY ||
+         iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_NONE) {
         return 1;
     }
 
@@ -736,14 +734,15 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     }
 
     if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ROUTE) {
-        if (!ucs_netlink_rule_exists(ndev_name, (struct sockaddr*)&sa_remote)) {
-            uct_iface_fill_info_str_buf(
-               params, "remote address %s is not routable",
-               ucs_sockaddr_str((struct sockaddr*)&sa_remote, remote_str, 128));
-            return 0;
+        if (ucs_netlink_rule_exists(ndev_name, (struct sockaddr *)&sa_remote)) {
+            return 1;
         }
 
-        return 1;
+        uct_iface_fill_info_str_buf(
+               params, "remote address %s is not routable",
+               ucs_sockaddr_str((struct sockaddr *)&sa_remote, remote_str, 128));
+
+        return 0;
     }
 
     /* check for zero-sized netmask */

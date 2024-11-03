@@ -23,10 +23,8 @@ BEGIN_C_DECLS
  * @param [in] nl_msg Pointer to the netlink message payload.
  * @param [in] arg    User-provided argument passed through from the caller.
  *
- * @return UCS_INPROGRESS if parsing should continue to the next message,
- *         UCS_OK if parsing is complete or should stop for any reason (which
- *         is not an error), or an error code if an error occurred during parsing.
- *
+ * @return UCS_OK if parsing is complete, UCS_INPROGRESS if there are more
+ *         messages to be parsed, or error code otherwise.
  */
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(struct nlmsghdr *nlh,
                                                void *nl_msg, void *arg);
@@ -59,10 +57,10 @@ ucs_status_t ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
  * Iterates over the netlink headers and parses each one of them
  * using a callback function provided by the caller.
  *
- * @param [in]    msg       Pointer to the full netlink message.
- * @param [in]    msg_len   Length of the netlink message in bytes.
- * @param [in]    parse_cb  The callback function to parse each sub-message (entry).
- * @param [in]    arg       Pointer to the callback function arguments.
+ * @param [in]  msg       Pointer to the full netlink message.
+ * @param [in]  msg_len   Length of the netlink message in bytes.
+ * @param [in]  parse_cb  The callback function to parse each sub-message (entry).
+ * @param [in]  arg       Pointer to the callback function arguments.
  *
  * @return UCS_OK if parsed successfully, or error code otherwise.
  */
@@ -71,13 +69,13 @@ ucs_status_t ucs_netlink_parse_msg(void *msg, size_t msg_len,
 
 
 /**
- * For a given network interface name and a destination address, return
- * whether a routing table rule exists.
+ * Check whether a routing table rule exists for a given network
+ * interface name and a destination address.
  *
- * @param [in]    iface       Pointer to the name of the interface.
- * @param [in]    sa_remote   Pointer to the destination address.
+ * @param [in]  iface      Pointer to the name of the interface.
+ * @param [in]  sa_remote  Pointer to the destination address.
  *
- * @return 1 if such rule exists, or 0 otherwise.
+ * @return 1 if rule exists, or 0 otherwise.
  */
 int ucs_netlink_rule_exists(const char *iface,
                             const struct sockaddr *sa_remote);
