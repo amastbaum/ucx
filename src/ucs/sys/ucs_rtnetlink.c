@@ -15,6 +15,7 @@
 #include <ucs/sys/sock.h>
 #include <ucs/type/status.h>
 
+#include <errno.h>
 #include <linux/rtnetlink.h>
 
 #define NETLINK_MESSAGE_MAX_SIZE 8195
@@ -66,7 +67,7 @@ static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
     }
 
     return ucs_bitwise_is_equal(ucs_sockaddr_get_inet_addr(sa_remote),
-                             dst_in_addr, rtm->rtm_dst_len);
+                                dst_in_addr, rtm->rtm_dst_len);
 }
 
 static ucs_status_t
@@ -97,7 +98,7 @@ int ucs_netlink_rule_exists(const char *iface_name,
     rtm.rtm_table  = RT_TABLE_MAIN;
 
     recv_msg_len = NETLINK_MESSAGE_MAX_SIZE;
-    recv_msg = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
+    recv_msg     = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
     if (recv_msg == NULL) {
         ucs_error("failed to allocate a buffer for netlink receive message");
         goto out;
@@ -113,7 +114,7 @@ int ucs_netlink_rule_exists(const char *iface_name,
 
     iface_index = if_nametoindex(iface_name);
     if (iface_index == 0) {
-        ucs_error("failed to get interface index");
+        ucs_error("failed to get interface index (errno %d)", errno);
         goto out;
     }
 

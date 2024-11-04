@@ -191,8 +191,8 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   {"ROCE_REACHABILITY_MODE", "route",
    "The mode used for performing the reachability check\n"
-   " - route        - all routable addresses will be assumed as reachable\n"
-   " - local_subnet - only addresses within the interface's subnet will be assumed as reachable.\n"
+   " - route        - all routable addresses are assumed as reachable\n"
+   " - local_subnet - only addresses within the interface's subnet are assumed as reachable.\n"
    " - none         - all addresses are assumed as reachable, without any check",
    ucs_offsetof(uct_ib_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_modes)},
 
