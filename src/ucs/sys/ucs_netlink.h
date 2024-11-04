@@ -10,7 +10,6 @@
 #include <ucs/type/status.h>
 
 #include <linux/netlink.h>
-#include <netinet/in.h>
 #include <stddef.h>
 
 BEGIN_C_DECLS
@@ -66,19 +65,6 @@ ucs_status_t ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
  */
 ucs_status_t ucs_netlink_parse_msg(void *msg, size_t msg_len,
                                    ucs_netlink_parse_cb_t parse_cb, void *arg);
-
-
-/**
- * Check whether a routing table rule exists for a given network
- * interface name and a destination address.
- *
- * @param [in]  iface      Pointer to the name of the interface.
- * @param [in]  sa_remote  Pointer to the destination address.
- *
- * @return 1 if rule exists, or 0 otherwise.
- */
-int ucs_netlink_rule_exists(const char *iface,
-                            const struct sockaddr *sa_remote);
 
 
 END_C_DECLS
