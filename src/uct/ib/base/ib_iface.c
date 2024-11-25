@@ -46,7 +46,7 @@ const char *uct_ib_mtu_values[] = {
 const char *uct_ib_reachability_modes[] = {
     [UCT_IB_REACHABILITY_MODE_ROUTE]        = "route",
     [UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET] = "local_subnet",
-    [UCT_IB_REACHABILITY_MODE_NONE]         = "none",
+    [UCT_IB_REACHABILITY_MODE_ALL]          = "all",
     [UCT_IB_REACHABILITY_MODE_LAST]         = NULL
 };
 
@@ -193,7 +193,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "The mode used for performing the reachability check\n"
    " - route        - all routable addresses are assumed as reachable\n"
    " - local_subnet - only addresses within the interface's subnet are assumed as reachable.\n"
-   " - none         - all addresses are assumed as reachable, without any check",
+   " - all          - all addresses are assumed as reachable, without any check",
    ucs_offsetof(uct_ib_iface_config_t, reachability_mode), UCS_CONFIG_TYPE_ENUM(uct_ib_reachability_modes)},
 
   {"ROCE_PATH_FACTOR", "1",
@@ -677,10 +677,10 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     ucs_status_t status;
 
     /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases)
-       or for reachability mode 'none' (no reachibility check is needed) */
+       or for reachability mode 'all' (no reachibility check is needed) */
     if ((uct_ib_address_flags_get_roce_version(remote_ib_addr_flags)) ==
          UCT_IB_DEVICE_ROCE_ANY ||
-         iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_NONE) {
+         iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ALL) {
         return 1;
     }
 
@@ -745,7 +745,7 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
         return 0;
     }
 
-    /* check for zero-sized netmask */
+    /* A 0-bit netmask implies any address is reachable */
     if (prefix_bits == 0) {
         return 1;
     }

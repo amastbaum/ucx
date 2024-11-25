@@ -94,6 +94,12 @@ int ucs_netlink_rule_exists(const char *iface_name,
     size_t recv_msg_len;
     int iface_index;
 
+    iface_index = if_nametoindex(iface_name);
+    if (iface_index == 0) {
+        ucs_error("failed to get interface index (errno %d)", errno);
+        goto out;
+    }
+
     rtm.rtm_family = sa_remote->sa_family;
     rtm.rtm_table  = RT_TABLE_MAIN;
 
@@ -109,12 +115,6 @@ int ucs_netlink_rule_exists(const char *iface_name,
     if (status != UCS_OK) {
         ucs_error("failed to send netlink route message (%s)",
                   ucs_status_string(status));
-        goto out;
-    }
-
-    iface_index = if_nametoindex(iface_name);
-    if (iface_index == 0) {
-        ucs_error("failed to get interface index (errno %d)", errno);
         goto out;
     }
 
