@@ -254,7 +254,9 @@ enum {
     /* Indicates that TX cq len in uct_ib_iface_init_attr_t is specified per
      * each IB path. Therefore IB interface constructor would need to multiply
      * TX CQ len by the number of IB paths (when it is properly initialized). */
-    UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2)
+    UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2),
+    /* Whether device and transport supports DDP */
+    UCT_IB_DDP_SUPPORTED             = UCS_BIT(3)
 };
 
 
@@ -338,29 +340,28 @@ struct uct_ib_iface {
 
     struct {
         /* offset from desc to payload */
-        unsigned                         rx_payload_offset;
+        unsigned                     rx_payload_offset;
         /* offset from desc to network header */
-        unsigned                         rx_hdr_offset;
+        unsigned                     rx_hdr_offset;
         /* offset from desc to user headroom */
-        unsigned                         rx_headroom_offset;
-        unsigned                         rx_max_batch;
-        unsigned                         rx_max_poll;
-        unsigned                         tx_max_poll;
-        unsigned                         seg_size;
-        unsigned                         roce_path_factor;
-        uint8_t                          max_inl_cqe[UCT_IB_DIR_LAST];
-        uint8_t                          port_num;
-        uint8_t                          sl;
-        uint8_t                          reverse_sl;
-        uint8_t                          traffic_class;
-        uint8_t                          hop_limit;
-        uint8_t                          qp_type;
-        uint8_t                          force_global_addr;
-        uint8_t                          flid_enabled;
-        enum ibv_mtu                     path_mtu;
-        uint8_t                          counter_set_id;
-        uct_ib_iface_send_overhead_t     send_overhead;
-        ucs_ternary_auto_value_t         dp_ordering_ooo; /* Activate RW OOO */
+        unsigned                     rx_headroom_offset;
+        unsigned                     rx_max_batch;
+        unsigned                     rx_max_poll;
+        unsigned                     tx_max_poll;
+        unsigned                     seg_size;
+        unsigned                     roce_path_factor;
+        uint8_t                      max_inl_cqe[UCT_IB_DIR_LAST];
+        uint8_t                      port_num;
+        uint8_t                      sl;
+        uint8_t                      reverse_sl;
+        uint8_t                      traffic_class;
+        uint8_t                      hop_limit;
+        uint8_t                      qp_type;
+        uint8_t                      force_global_addr;
+        uint8_t                      flid_enabled;
+        enum ibv_mtu                 path_mtu;
+        uint8_t                      counter_set_id;
+        uct_ib_iface_send_overhead_t send_overhead;
         uct_ib_iface_reachability_mode_t reachability_mode;
     } config;
 
