@@ -10,8 +10,8 @@
 
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
-#include <ucs/sys/ucs_rtnetlink.h>
-#include <ucs/sys/ucs_netlink.h>
+#include <ucs/sys/rtnetlink.h>
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/sock.h>
 #include <ucs/type/status.h>
 
@@ -21,14 +21,15 @@
 #define NETLINK_MESSAGE_MAX_SIZE 8195
 
 
-struct ucs_netlink_route_info_t {
+typedef struct {
     const struct sockaddr *sa_remote;
     int                    if_index;
-    int                    matching;
-};
+    int                    found;
+} ucs_netlink_route_info_t;
 
-static ucs_status_t ucs_rtnetlink_get_route_info(struct rtattr *rta, int len,
-                                                 int *if_idx, void **dst_in_addr)
+static ucs_status_t
+ucs_rtnetlink_get_route_info(const struct rtattr *rta, int len, int *if_idx,
+                             void **dst_in_addr)
 {
     *if_idx      = -1;
     *dst_in_addr = NULL;
@@ -50,7 +51,7 @@ static ucs_status_t ucs_rtnetlink_get_route_info(struct rtattr *rta, int len,
     return UCS_OK;
 }
 
-static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
+static int ucs_rtnetlink_is_rule_matching(const struct rtmsg *rtm, size_t rtm_len,
                                           const struct sockaddr *sa_remote,
                                           int iface_index)
 {
@@ -71,30 +72,32 @@ static int ucs_rtnetlink_is_rule_matching(struct rtmsg *rtm, size_t rtm_len,
 }
 
 static ucs_status_t
-ucs_netlink_parse_rt_entry_cb(struct nlmsghdr *nlh, void *nl_msg, void *arg)
+ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
+                              void *arg)
 {
-    struct ucs_netlink_route_info_t *info = (struct ucs_netlink_route_info_t *)arg;
+    ucs_netlink_route_info_t *info = (ucs_netlink_route_info_t *)arg;
 
-    if (ucs_rtnetlink_is_rule_matching((struct rtmsg *)nl_msg, RTM_PAYLOAD(nlh),
-                                       info->sa_remote, info->if_index)) {
-        info->matching = 1;
+    if (ucs_rtnetlink_is_rule_matching((const struct rtmsg *)nl_msg,
+                                       RTM_PAYLOAD(nlh), info->sa_remote,
+                                       info->if_index)) {
+        info->found = 1;
         return UCS_OK;
     }
 
     return UCS_INPROGRESS;
 }
 
-int ucs_netlink_rule_exists(const char *iface_name,
-                            const struct sockaddr *sa_remote)
+int ucs_netlink_route_exists(const char *if_name,
+                             const struct sockaddr *sa_remote)
 {
-    char *recv_msg                       = NULL;
-    struct ucs_netlink_route_info_t info = {0};
-    struct rtmsg rtm                     = {0};
+    char *recv_msg                = NULL;
+    ucs_netlink_route_info_t info = {0};
+    struct rtmsg rtm              = {0};
     ucs_status_t status;
     size_t recv_msg_len;
     int iface_index;
 
-    iface_index = if_nametoindex(iface_name);
+    iface_index = if_nametoindex(if_name);
     if (iface_index == 0) {
         ucs_error("failed to get interface index (errno %d)", errno);
         goto out;
@@ -131,5 +134,5 @@ int ucs_netlink_rule_exists(const char *iface_name,
 
 out:
     ucs_free(recv_msg);
-    return info.matching;
+    return info.found;
 }

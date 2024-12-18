@@ -23,7 +23,7 @@
 #include <ucs/type/serialize.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
-#include <ucs/sys/ucs_rtnetlink.h>
+#include <ucs/sys/rtnetlink.h>
 #include <ucs/sys/sock.h>
 #include <string.h>
 #include <stdlib.h>
@@ -635,8 +635,8 @@ ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static void uct_ib_iface_log_subnet_info(const struct sockaddr_storage *sa1,
-                                         const struct sockaddr_storage *sa2,
+static void uct_ib_iface_log_subnet_info(const struct sockaddr *sa1,
+                                         const struct sockaddr *sa2,
                                          unsigned prefix_len, int matched)
 {
     UCS_STRING_BUFFER_ONSTACK(info, UCS_SOCKADDR_STRING_LEN * 2 + 60);
@@ -650,10 +650,69 @@ static void uct_ib_iface_log_subnet_info(const struct sockaddr_storage *sa1,
                               " match with a %u-bit prefix, addresses: ",
                               prefix_len);
 
-    ucs_string_buffer_append_saddr(&info, (struct sockaddr*)sa1);
+    ucs_string_buffer_append_saddr(&info, sa1);
     ucs_string_buffer_appendf(&info, " ");
-    ucs_string_buffer_append_saddr(&info, (struct sockaddr*)sa2);
+    ucs_string_buffer_append_saddr(&info, sa2);
     ucs_debug("%s", ucs_string_buffer_cstr(&info));
+}
+
+static int
+uct_ib_iface_roce_is_routable(uct_ib_device_t *dev, uint8_t port_num,
+                              int gid_index, struct sockaddr *sa_remote,
+                              const uct_iface_is_reachable_params_t *params)
+{
+    char ndev_name[IFNAMSIZ];
+    char remote_str[128];
+    ucs_status_t status;
+
+    status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
+                                              ndev_name, sizeof(ndev_name));
+    if (status != UCS_OK) {
+        uct_iface_fill_info_str_buf(
+            params, "couldn't get network interface name");
+        return 0;
+    }
+
+    if (ucs_netlink_route_exists(ndev_name, sa_remote)) {
+        return 1;
+    }
+
+    uct_iface_fill_info_str_buf(
+            params, "remote address %s is not routable",
+            ucs_sockaddr_str(sa_remote, remote_str, 128));
+    return 0;
+}
+
+static int
+uct_ib_iface_roce_is_reachable_in_local_subnet(
+                                int prefix_bits, struct sockaddr *sa_local,
+                                struct sockaddr *sa_remote,
+                                const uct_iface_is_reachable_params_t *params)
+{
+    int matched;
+    char local_str[128], remote_str[128];
+
+    /* A 0-bit netmask implies any address is reachable */
+    if (prefix_bits == 0) {
+        return 1;
+    }
+
+    matched = ucs_sockaddr_is_same_subnet(sa_local, sa_remote, prefix_bits);
+
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+        uct_ib_iface_log_subnet_info(sa_local, sa_remote, prefix_bits, matched);
+    }
+
+    if (!matched) {
+        uct_iface_fill_info_str_buf(
+                    params,
+                    "IP addresses do not match with a %u-bit prefix. local IP"
+                    " is %s, remote IP is %s",
+                    prefix_bits, ucs_sockaddr_str(sa_local, local_str, 128),
+                    ucs_sockaddr_str(sa_remote, remote_str, 128));
+    }
+
+    return matched;
 }
 
 static int
@@ -672,9 +731,6 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     uct_ib_roce_version_t remote_roce_ver;
     sa_family_t remote_ib_addr_af;
     char local_str[128], remote_str[128];
-    int matched;
-    char ndev_name[IFNAMSIZ];
-    ucs_status_t status;
 
     /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases)
        or for reachability mode 'all' (no reachibility check is needed) */
@@ -724,53 +780,16 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
         return 0;
     }
 
-    status = uct_ib_device_get_roce_ndev_name(dev, port_num,
-                                              local_gid_info->gid_index,
-                                              ndev_name, sizeof(ndev_name));
-    if (status != UCS_OK) {
-        uct_iface_fill_info_str_buf(
-               params, "couldn't get network interface name");
-        return 0;
-    }
-
     if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ROUTE) {
-        if (ucs_netlink_rule_exists(ndev_name, (struct sockaddr *)&sa_remote)) {
-            return 1;
-        }
-
-        uct_iface_fill_info_str_buf(
-               params, "remote address %s is not routable",
-               ucs_sockaddr_str((struct sockaddr *)&sa_remote, remote_str, 128));
-
-        return 0;
+        return uct_ib_iface_roce_is_routable(dev, port_num,
+                                             local_gid_info->gid_index,
+                                             (struct sockaddr *)&sa_remote,
+                                             params);
     }
 
-    /* A 0-bit netmask implies any address is reachable */
-    if (prefix_bits == 0) {
-        return 1;
-    }
-
-    matched = ucs_sockaddr_is_same_subnet((struct sockaddr*)&sa_local,
-                                          (struct sockaddr*)&sa_remote,
-                                          prefix_bits);
-
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
-        uct_ib_iface_log_subnet_info(&sa_local, &sa_remote, prefix_bits, matched);
-    }
-
-    if (!matched) {
-        uct_iface_fill_info_str_buf(
-                    params,
-                    "IP addresses do not match with a %u-bit prefix. local IP"
-                    " is %s, remote IP is %s",
-                    prefix_bits,
-                    ucs_sockaddr_str((struct sockaddr *)&sa_local,
-                                     local_str, 128),
-                    ucs_sockaddr_str((struct sockaddr *)&sa_remote,
-                                     remote_str, 128));
-    }
-
-    return matched;
+    return uct_ib_iface_roce_is_reachable_in_local_subnet(
+                                    prefix_bits, (struct sockaddr *)&sa_local,
+                                    (struct sockaddr *)&sa_remote, params);
 }
 
 int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,

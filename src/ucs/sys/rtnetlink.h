@@ -18,13 +18,13 @@ BEGIN_C_DECLS
  * Check whether a routing table rule exists for a given network
  * interface name and a destination address.
  *
- * @param [in]  iface      Pointer to the name of the interface.
+ * @param [in]  if_name    Pointer to the name of the interface.
  * @param [in]  sa_remote  Pointer to the destination address.
  *
  * @return 1 if rule exists, or 0 otherwise.
  */
-int ucs_netlink_rule_exists(const char *iface,
-                            const struct sockaddr *sa_remote);
+int ucs_netlink_route_exists(const char *if_name,
+                             const struct sockaddr *sa_remote);
 
 
 END_C_DECLS
