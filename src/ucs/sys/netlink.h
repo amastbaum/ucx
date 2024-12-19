@@ -10,61 +10,23 @@
 #include <ucs/type/status.h>
 
 #include <linux/netlink.h>
+#include <netinet/in.h>
 #include <stddef.h>
 
 BEGIN_C_DECLS
 
 
 /**
- * Callback function for parsing individual netlink messages.
+ * Check whether a routing table rule exists for a given network
+ * interface name and a destination address.
  *
- * @param [in] nlh    Pointer to the netlink message header.
- * @param [in] nl_msg Pointer to the netlink message payload.
- * @param [in] arg    User-provided argument passed through from the caller.
+ * @param [in]  if_name    Pointer to the name of the interface.
+ * @param [in]  sa_remote  Pointer to the destination address.
  *
- * @return UCS_OK if parsing is complete, UCS_INPROGRESS if there are more
- *         messages to be parsed, or error code otherwise.
+ * @return 1 if rule exists, or 0 otherwise.
  */
-typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
-                                               const void *nl_msg, void *arg);
-
-
-/**
- * Sends and receives a netlink message using a user allocated buffer.
- *
- * @param [in]    protocol             The communication protocol to be used
- *                                     (NETLINK_ROUTE, NETLINK_NETFILTER, etc.).
- * @param [in]    nlmsg_type           Netlink message type (RTM_GETROUTE,
- *                                     RTM_GETNEIGH, etc.).
- * @param [in]    nl_protocol_hdr      A struct that holds nl protocol specific
- *                                     details and is placed in nlmsghdr.
- * @param [in]    nl_protocol_hdr_size Protocol struct size.
- * @param [out]   recv_msg_buf         The buffer that will hold the received
- *                                     message.
- * @param [inout] recv_msg_buf_len     Pointer to the size of the buffer and to
- *                                     store the length of the received message.
- *
- * @return UCS_OK if received successfully, or error code otherwise.
- */
-ucs_status_t ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
-                                  const void *nl_protocol_hdr,
-                                  size_t nl_protocol_hdr_size,
-                                  char *recv_msg_buf, size_t *recv_msg_buf_len);
-
-
-/**
- * Iterates over the netlink headers and parses each one of them
- * using a callback function provided by the caller.
- *
- * @param [in]  msg       Pointer to the full netlink message.
- * @param [in]  msg_len   Length of the netlink message in bytes.
- * @param [in]  parse_cb  The callback function to parse each sub-message (entry).
- * @param [in]  arg       Pointer to the callback function arguments.
- *
- * @return UCS_OK if parsed successfully, or error code otherwise.
- */
-ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                                   ucs_netlink_parse_cb_t parse_cb, void *arg);
+int ucs_netlink_route_exists(const char *if_name,
+                             const struct sockaddr *sa_remote);
 
 
 END_C_DECLS

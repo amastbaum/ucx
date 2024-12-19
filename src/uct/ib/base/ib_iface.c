@@ -23,7 +23,7 @@
 #include <ucs/type/serialize.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
-#include <ucs/sys/rtnetlink.h>
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/sock.h>
 #include <string.h>
 #include <stdlib.h>
