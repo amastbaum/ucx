@@ -732,18 +732,17 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     sa_family_t remote_ib_addr_af;
     char local_str[128], remote_str[128];
 
+    remote_roce_ver = uct_ib_address_flags_get_roce_version(remote_ib_addr_flags);
+
     /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases)
        or for reachability mode 'all' (no reachibility check is needed) */
-    if ((uct_ib_address_flags_get_roce_version(remote_ib_addr_flags)) ==
-         UCT_IB_DEVICE_ROCE_ANY ||
-         iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ALL) {
+    if (remote_roce_ver == UCT_IB_DEVICE_ROCE_ANY ||
+        iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_ALL) {
         return 1;
     }
 
     /* check the RoCE version */
     ucs_assert(local_roce_ver != UCT_IB_DEVICE_ROCE_ANY);
-
-    remote_roce_ver = uct_ib_address_flags_get_roce_version(remote_ib_addr_flags);
 
     if (local_roce_ver != remote_roce_ver) {
         uct_iface_fill_info_str_buf(
@@ -1384,18 +1383,17 @@ uct_ib_iface_init_roce_addr_prefix(uct_ib_iface_t *iface,
 
     ucs_assert(uct_ib_iface_is_roce(iface));
 
-    if ((gid_info->roce_info.ver != UCT_IB_DEVICE_ROCE_V2) ||
-        (!config->rocev2_local_subnet &&
-        (config->reachability_mode != UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET))) {
-        iface->addr_prefix_bits = 0;
-        return UCS_OK;
-    }
-
     /* Override the original value of reachability_mode if
        rocev2_local_subnet is enabled to maintain backward compatibility */
     iface->config.reachability_mode = config->rocev2_local_subnet ?
                                       UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET :
                                       config->reachability_mode;
+
+    if ((gid_info->roce_info.ver != UCT_IB_DEVICE_ROCE_V2) ||
+        (iface->config.reachability_mode != UCT_IB_REACHABILITY_MODE_LOCAL_SUBNET)) {
+        iface->addr_prefix_bits = 0;
+        return UCS_OK;
+    }
 
     status = ucs_sockaddr_inet_addr_size(gid_info->roce_info.addr_family,
                                          &addr_size);
