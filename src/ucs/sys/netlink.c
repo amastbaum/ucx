@@ -98,14 +98,15 @@ static ucs_status_t
 ucs_netlink_handle_request(int protocol, unsigned short nlmsg_type,
                            const void *nl_protocol_hdr,
                            size_t nl_protocol_hdr_size,
-                           char *recv_msg_buf, size_t recv_msg_buf_len,
                            ucs_netlink_parse_cb_t parse_cb, void *arg)
 {
     struct nlmsghdr nlh = {0};
+    char *recv_msg      = NULL;
     ucs_status_t status;
     int fd;
     struct iovec iov[2];
     size_t bytes_sent;
+    size_t recv_msg_len;
 
     status = ucs_netlink_socket_init(&fd, protocol);
     if (status != UCS_OK) {
@@ -130,8 +131,15 @@ ucs_netlink_handle_request(int protocol, unsigned short nlmsg_type,
         goto out;
     }
 
+    recv_msg_len = NETLINK_MESSAGE_MAX_SIZE;
+    recv_msg     = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
+    if (recv_msg == NULL) {
+        ucs_error("failed to allocate a buffer for netlink receive message");
+        goto out;
+    }
+
     do {
-        status = ucs_socket_recv_nb(fd, recv_msg_buf, &recv_msg_buf_len);
+        status = ucs_socket_recv_nb(fd, recv_msg, &recv_msg_len);
     } while (status == UCS_ERR_NO_PROGRESS);
 
     if (status != UCS_OK) {
@@ -140,7 +148,7 @@ ucs_netlink_handle_request(int protocol, unsigned short nlmsg_type,
         goto out;
     }
 
-    status = ucs_netlink_parse_msg(recv_msg_buf, recv_msg_buf_len, parse_cb, arg);
+    status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
     if (status != UCS_OK) {
         ucs_error("failed to parse netlink message (%s)",
                   ucs_status_string(status));
@@ -149,6 +157,7 @@ ucs_netlink_handle_request(int protocol, unsigned short nlmsg_type,
 
 out:
     ucs_close_fd(&fd);
+    free(recv_msg);
     return status;
 }
 
@@ -215,11 +224,9 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, const void *nl_msg,
 int ucs_netlink_route_exists(const char *if_name,
                              const struct sockaddr *sa_remote)
 {
-    char *recv_msg                = NULL;
     ucs_netlink_route_info_t info = {0};
     struct rtmsg rtm              = {0};
     ucs_status_t status;
-    size_t recv_msg_len;
     int iface_index;
 
     iface_index = if_nametoindex(if_name);
@@ -231,18 +238,11 @@ int ucs_netlink_route_exists(const char *if_name,
     rtm.rtm_family = sa_remote->sa_family;
     rtm.rtm_table  = RT_TABLE_MAIN;
 
-    recv_msg_len = NETLINK_MESSAGE_MAX_SIZE;
-    recv_msg     = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
-    if (recv_msg == NULL) {
-        ucs_error("failed to allocate a buffer for netlink receive message");
-        goto out;
-    }
-
     info.if_index  = iface_index;
     info.sa_remote = sa_remote;
 
     status = ucs_netlink_handle_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm,
-                                        sizeof(rtm), recv_msg, recv_msg_len,
+                                        sizeof(rtm),
                                         ucs_netlink_parse_rt_entry_cb, &info);
     if (status != UCS_OK) {
         ucs_error("failed to send netlink route message (%s)",
@@ -251,6 +251,5 @@ int ucs_netlink_route_exists(const char *if_name,
     }
 
 out:
-    ucs_free(recv_msg);
     return info.found;
 }
