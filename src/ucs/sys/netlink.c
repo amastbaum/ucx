@@ -72,9 +72,34 @@ err:
 }
 
 static ucs_status_t
-ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
-                     const void *nl_protocol_hdr, size_t nl_protocol_hdr_size,
-                     char *recv_msg_buf, size_t *recv_msg_buf_len)
+ucs_netlink_parse_msg(const void *msg, size_t msg_len,
+                      ucs_netlink_parse_cb_t parse_cb, void *arg)
+{
+    ucs_status_t status        = UCS_INPROGRESS;
+    const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
+
+    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
+           (nlh->nlmsg_type != NLMSG_DONE)) {
+        if (nlh->nlmsg_type == NLMSG_ERROR) {
+            struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
+            printf("failed to parse netlink message header (%d): %s\n",
+                      err->error, strerror(-err->error));
+            return UCS_ERR_IO_ERROR;
+        }
+
+        status = parse_cb(nlh, NLMSG_DATA(nlh), arg);
+        nlh = NLMSG_NEXT(nlh, msg_len);
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucs_netlink_handle_request(int protocol, unsigned short nlmsg_type,
+                           const void *nl_protocol_hdr,
+                           size_t nl_protocol_hdr_size,
+                           char *recv_msg_buf, size_t recv_msg_buf_len,
+                           ucs_netlink_parse_cb_t parse_cb, void *arg)
 {
     struct nlmsghdr nlh = {0};
     ucs_status_t status;
@@ -106,7 +131,7 @@ ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
     }
 
     do {
-        status = ucs_socket_recv_nb(fd, recv_msg_buf, recv_msg_buf_len);
+        status = ucs_socket_recv_nb(fd, recv_msg_buf, &recv_msg_buf_len);
     } while (status == UCS_ERR_NO_PROGRESS);
 
     if (status != UCS_OK) {
@@ -115,32 +140,16 @@ ucs_netlink_send_cmd(int protocol, unsigned short nlmsg_type,
         goto out;
     }
 
+    status = ucs_netlink_parse_msg(recv_msg_buf, recv_msg_buf_len, parse_cb, arg);
+    if (status != UCS_OK) {
+        ucs_error("failed to parse netlink message (%s)",
+                  ucs_status_string(status));
+        goto out;
+    }
+
 out:
     ucs_close_fd(&fd);
     return status;
-}
-
-static ucs_status_t
-ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg)
-{
-    ucs_status_t status        = UCS_INPROGRESS;
-    const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
-
-    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-           (nlh->nlmsg_type != NLMSG_DONE)) {
-        if (nlh->nlmsg_type == NLMSG_ERROR) {
-            struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
-            printf("failed to parse netlink message header (%d): %s\n",
-                      err->error, strerror(-err->error));
-            return UCS_ERR_IO_ERROR;
-        }
-
-        status = parse_cb(nlh, NLMSG_DATA(nlh), arg);
-        nlh = NLMSG_NEXT(nlh, msg_len);
-    }
-
-    return UCS_OK;
 }
 
 static ucs_status_t
@@ -229,21 +238,14 @@ int ucs_netlink_route_exists(const char *if_name,
         goto out;
     }
 
-    status = ucs_netlink_send_cmd(NETLINK_ROUTE, RTM_GETROUTE, &rtm,
-                                  sizeof(rtm), recv_msg, &recv_msg_len);
-    if (status != UCS_OK) {
-        ucs_error("failed to send netlink route message (%s)",
-                  ucs_status_string(status));
-        goto out;
-    }
-
     info.if_index  = iface_index;
     info.sa_remote = sa_remote;
 
-    status = ucs_netlink_parse_msg(recv_msg, recv_msg_len,
-                                   ucs_netlink_parse_rt_entry_cb, &info);
+    status = ucs_netlink_handle_request(NETLINK_ROUTE, RTM_GETROUTE, &rtm,
+                                        sizeof(rtm), recv_msg, recv_msg_len,
+                                        ucs_netlink_parse_rt_entry_cb, &info);
     if (status != UCS_OK) {
-        ucs_error("failed to parse netlink route message (%s)",
+        ucs_error("failed to send netlink route message (%s)",
                   ucs_status_string(status));
         goto out;
     }
