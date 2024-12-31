@@ -58,7 +58,7 @@ static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
     }
 
     if (bind(*fd_p, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-        ucs_error("failed to bind netlink socket: %m (%d)", *fd_p);
+        ucs_error("failed to bind netlink socket %d: %m", *fd_p);
         status = UCS_ERR_IO_ERROR;
         goto err_close_socket;
     }
@@ -71,7 +71,7 @@ err:
     return status;
 }
 
-static size_t get_nlmsg_size(int sock_fd)
+static size_t ucs_netlink_get_msg_size(int sock_fd)
 {
     size_t length       = 0;
     ucs_status_t status = ucs_socket_recv_nb(sock_fd, NULL,
@@ -145,7 +145,7 @@ ucs_netlink_handle_request(int protocol, unsigned short nlmsg_type,
         goto out;
     }
 
-    recv_msg_len = get_nlmsg_size(fd);
+    recv_msg_len = ucs_netlink_get_msg_size(fd);
     if (recv_msg_len == -1) {
         ucs_error("failed to get netlink message size");
         goto out;
@@ -196,8 +196,7 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_idx,
     }
 
     if ((*if_idx == -1) || (*dst_in_addr == NULL)) {
-        ucs_diag("either iface index or dest address are missing "
-                  "in the routing table entry");
+        ucs_diag("invalid routing table entry");
         return UCS_ERR_INVALID_PARAM;
     }
 
