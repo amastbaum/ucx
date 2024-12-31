@@ -596,9 +596,9 @@ ucs_socket_handle_io(int fd, const void *data, size_t count,
 
 static inline ucs_status_t
 ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
-                    ucs_socket_io_func_t io_func, const char *name)
+                    ucs_socket_io_func_t io_func, const char *name, int flags)
 {
-    ssize_t ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
+    ssize_t ret = io_func(fd, data, *length_p, MSG_NOSIGNAL | flags);
     return ucs_socket_handle_io(fd, data, *length_p, length_p, 0,
                                 ret, errno, name);
 }
@@ -611,7 +611,7 @@ ucs_socket_do_io_b(int fd, void *data, size_t length,
     ucs_status_t status;
 
     do {
-        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
+        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name, 0);
         done_cnt += cur_cnt;
         ucs_assert(done_cnt <= length);
         cur_cnt = length - done_cnt;
@@ -638,7 +638,7 @@ ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p)
 {
     return ucs_socket_do_io_nb(fd, (void*)data, length_p,
-                               (ucs_socket_io_func_t)send, "send");
+                               (ucs_socket_io_func_t)send, "send", 0);
 }
 
 /* recv is declared as 'always_inline' on some platforms, it leads to
@@ -648,9 +648,10 @@ static ssize_t ucs_socket_recv_io(int fd, void *data, size_t size, int flags)
     return recv(fd, data, size, flags);
 }
 
-ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p)
+ucs_status_t ucs_socket_recv_nb(int fd, void *data, int flags, size_t *length_p)
 {
-    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io, "recv");
+    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io,
+                               "recv", flags);
 }
 
 ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)

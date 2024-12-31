@@ -280,13 +280,14 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p);
  * @param [in]      fd              Socket fd.
  * @param [in]      data            A pointer to a buffer to receive the incoming
  *                                  data.
+ * @param [in]      flags           recv flags.
  * @param [in/out]  length_p        The length, in bytes, of the data in buffer
  *                                  pointed to by the `data` parameter. The amount of
  *                                  data received is written to this argument.
  *
  * @return UCS_OK on success or an error code on failure.
  */
-ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p);
+ucs_status_t ucs_socket_recv_nb(int fd, void *data, int flags, size_t *length_p);
 
 
 /**

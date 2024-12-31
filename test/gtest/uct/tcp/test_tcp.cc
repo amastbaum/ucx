@@ -48,7 +48,7 @@ public:
 
         scoped_log_handler slh(wrap_errors_logger);
         if (nb) {
-            status = ucs_socket_recv_nb(fd, &msg, &msg_size);
+            status = ucs_socket_recv_nb(fd, &msg, 0, &msg_size);
         } else {
             status = ucs_socket_recv(fd, &msg, msg_size);
         }

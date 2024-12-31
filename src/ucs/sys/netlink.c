@@ -71,6 +71,20 @@ err:
     return status;
 }
 
+static size_t get_nlmsg_size(int sock_fd)
+{
+    size_t length       = 0;
+    ucs_status_t status = ucs_socket_recv_nb(sock_fd, NULL,
+                                             MSG_PEEK | MSG_TRUNC, &length);
+    if (status != UCS_OK) {
+        ucs_error("failed to get netlink message size %d (%s)",
+                  sock_fd, ucs_status_string(status));
+        return -1;
+    }
+
+    return length;
+}
+
 static ucs_status_t
 ucs_netlink_parse_msg(const void *msg, size_t msg_len,
                       ucs_netlink_parse_cb_t parse_cb, void *arg)
@@ -131,15 +145,20 @@ ucs_netlink_handle_request(int protocol, unsigned short nlmsg_type,
         goto out;
     }
 
-    recv_msg_len = NETLINK_MESSAGE_MAX_SIZE;
-    recv_msg     = ucs_malloc(NETLINK_MESSAGE_MAX_SIZE, "netlink recv message");
+    recv_msg_len = get_nlmsg_size(fd);
+    if (recv_msg_len == -1) {
+        ucs_error("failed to get netlink message size");
+        goto out;
+    }
+
+    recv_msg = ucs_malloc(recv_msg_len, "netlink recv message");
     if (recv_msg == NULL) {
         ucs_error("failed to allocate a buffer for netlink receive message");
         goto out;
     }
 
     do {
-        status = ucs_socket_recv_nb(fd, recv_msg, &recv_msg_len);
+        status = ucs_socket_recv(fd, recv_msg, recv_msg_len);
     } while (status == UCS_ERR_NO_PROGRESS);
 
     if (status != UCS_OK) {
@@ -245,7 +264,7 @@ int ucs_netlink_route_exists(const char *if_name,
                                         sizeof(rtm),
                                         ucs_netlink_parse_rt_entry_cb, &info);
     if (status != UCS_OK) {
-        ucs_error("failed to send netlink route message (%s)",
+        ucs_error("failed to handle netlink route request (%s)",
                   ucs_status_string(status));
         goto out;
     }
