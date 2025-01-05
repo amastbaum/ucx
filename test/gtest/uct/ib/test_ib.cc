@@ -305,7 +305,7 @@ class test_uct_ib_roce : public test_uct_ib {
 };
 
 UCS_TEST_P(test_uct_ib_roce, local_subnet_only,
-           "UCX_IB_ROCE_REACHABILITY_MODE=local_subnet")
+           "IB_ROCE_REACHABILITY_MODE=local_subnet")
 {
     send_recv_short();
 }
