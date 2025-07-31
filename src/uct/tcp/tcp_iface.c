@@ -203,6 +203,7 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_tcp_device_addr_t *tcp_dev_addr;
     int is_local_loopback, is_remote_loopback;
     struct sockaddr_storage remote_addr;
+    char remote_addr_str[UCS_SOCKADDR_STRING_LEN];
     unsigned ndev_index;
     ucs_status_t status;
 
@@ -263,9 +264,11 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     if (!ucs_netlink_route_exists(ndev_index,
-                                    (const struct sockaddr *)&remote_addr)) {
+                                  (const struct sockaddr *)&remote_addr)) {
         uct_iface_fill_info_str_buf(
-                    params, "route does not exist");
+                    params, "no route to %s",
+                    ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
+                                     remote_addr_str, UCS_SOCKADDR_STRING_LEN));
         return 0;
     }
 
