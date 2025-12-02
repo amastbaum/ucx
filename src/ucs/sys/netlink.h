@@ -45,20 +45,33 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
 
 
 /**
- * Check whether a routing table rule exists for a given network
- * interface name and a destination address.
+ * Check whether a specific route exists for a given network interface and
+ * destination address.
  *
- * @param [in]  if_index          A global index representing the network
-                                  interface, as assigned by the system
-                                  (e.g., obtained via if_nametoindex()).
- * @param [in]  sa_remote         Pointer to the destination address.
- * @param [in]  allow_default_gw  Allow matching default gateway routes (1) or
- *                                only specific subnet routes (0).
+ * @param [in]  if_index           A global index representing the network
+ *                                 interface, as assigned by the system
+ *                                 (e.g., obtained via if_nametoindex()).
+ * @param [in]  sa_remote          Pointer to the destination address.
+ * @param [out] has_default_gw_p   Optional pointer to store whether a default
+ *                                 gateway route exists for this destination.
+ *                                 Set to 1 if route not found and default GW
+ *                                 exists, 0 otherwise.
+ *                                 Pass NULL if this information is not needed.
  *
- * @return 1 if rule exists, or 0 otherwise.
+ * @return 1 if a specific route exists, or 0 otherwise.
  */
 int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
-                             int allow_default_gw);
+                             int *has_default_gw_p);
+
+/**
+ * Check whether a specific route exists for a given destination address
+ * in ANY network interface.
+ *
+ * @param [in]  sa_remote         Pointer to the destination address.
+ *
+ * @return 1 if a specific route exists in any interface, or 0 otherwise.
+ */
+int ucs_netlink_has_any_specific_route(const struct sockaddr *sa_remote);
 
 END_C_DECLS
 

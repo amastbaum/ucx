@@ -211,7 +211,7 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     struct sockaddr_storage remote_addr;
     char remote_addr_str[UCS_SOCKADDR_STRING_LEN];
     unsigned ndev_index;
-    int allow_default_gw;
+    int allow_default_gw, has_default_gw;
     ucs_status_t status;
 
     if (!uct_iface_is_reachable_params_valid(
@@ -270,20 +270,44 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
+    if (ucs_netlink_route_exists(ndev_index,
+                                 (const struct sockaddr *)&remote_addr,
+                                 &has_default_gw)) {
+        return 1;
+    }
+
+    /* Going to search for a default GW route on this interface. If found, and
+     * at the same time no other specific route exists for this address in any
+     * other interface, return 1. */
     allow_default_gw = !!(tcp_dev_addr->flags &
                           UCT_TCP_DEVICE_ADDR_FLAG_ALLOW_DEFAULT_GW);
 
-    if (!ucs_netlink_route_exists(ndev_index,
-                                  (const struct sockaddr *)&remote_addr,
-                                  allow_default_gw)) {
-        uct_iface_fill_info_str_buf(
-                    params, "no route to %s",
+    if (allow_default_gw && has_default_gw) {
+        if (ucs_netlink_has_any_specific_route(
+                            (const struct sockaddr *)&remote_addr)) {
+            uct_iface_fill_info_str_buf(
+                    params, "default GW exists but specific route found in "
+                    "another interface for %s",
                     ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
                                      remote_addr_str, UCS_SOCKADDR_STRING_LEN));
-        return 0;
+            return 0;
+        }
+
+        /* No specific rule anywhere, default GW is the only way */
+        ucs_trace(
+                "tcp_iface %p (%s): using default GW as only route to %s",
+                iface, iface->if_name,
+                ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
+                                 remote_addr_str, UCS_SOCKADDR_STRING_LEN));
+        return 1;
     }
 
-    return 1;
+    /* No route found at all */
+    uct_iface_fill_info_str_buf(
+                params, "no route to %s",
+                ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
+                                 remote_addr_str, UCS_SOCKADDR_STRING_LEN));
+    return 0;
 }
 
 static const char *

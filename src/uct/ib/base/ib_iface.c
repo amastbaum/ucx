@@ -700,6 +700,8 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
     uint8_t port_num     = iface->config.port_num;
     char remote_str[128];
     unsigned ndev_index, lo_ndev_index;
+    ucs_status_t lo_status;
+    int has_default_gw;
 
     if (uct_ib_device_get_roce_ndev_index(dev, port_num, gid_index,
                                           &ndev_index) != UCS_OK) {
@@ -710,32 +712,66 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
         return 0;
     }
 
-    if (!ucs_netlink_route_exists(ndev_index, sa_remote, 1)) {
-        /* try to use loopback interface for reachability check, because it may
-         * be used for routing in case of an interface with VRF is configured
-         * and a RoCE IP interface uses this VRF table for routing.
-         */
-        if (uct_ib_iface_get_loopback_ndev_index(&lo_ndev_index) != UCS_OK) {
-            uct_iface_fill_info_str_buf(params,
-                                        "loopback iface index is not found");
-            return 0;
-        }
+    if (ucs_netlink_route_exists(ndev_index, sa_remote, &has_default_gw)) {
+        return 1;
+    }
 
-        if (!ucs_netlink_route_exists(lo_ndev_index, sa_remote, 1)) {
-            uct_iface_fill_info_str_buf(params,
-                                        "remote address %s is not routable "
-                                        "neither by interface "UCT_IB_IFACE_FMT
-                                        " (ifname_index=%u) nor by loopback "
-                                        "interface (ifname_index=%u)",
-                                        ucs_sockaddr_str(sa_remote, remote_str,
-                                                         128),
-                                        UCT_IB_IFACE_ARG(iface),
-                                        ndev_index, lo_ndev_index);
-            return 0;
+    /* No route found - first, try loopback interface for reachability check,
+     * because it may be used for routing in case of an interface with VRF is
+     * configured and a RoCE IP interface uses this VRF table for routing.
+     */
+    lo_status = uct_ib_iface_get_loopback_ndev_index(&lo_ndev_index);
+    if (lo_status == UCS_OK) {
+        if (ucs_netlink_route_exists(lo_ndev_index, sa_remote, NULL)) {
+            ucs_trace(
+                UCT_IB_IFACE_FMT": found specific route via loopback to %s",
+                UCT_IB_IFACE_ARG(iface),
+                ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)));
+            return 1;
         }
     }
 
-    return 1;
+    /* Going to search a default GW route on this interface. If found, and
+     * at the same time no other specific route exists for this address in any
+     * other interface, return 1. */
+    if (has_default_gw) {
+        if (!ucs_netlink_has_any_specific_route(sa_remote)) {
+            /* No specific rule anywhere, default GW is the only way */
+            ucs_trace(
+                UCT_IB_IFACE_FMT": using default GW as only route to %s",
+                UCT_IB_IFACE_ARG(iface),
+                ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)));
+            return 1;
+        }
+
+        ucs_trace(UCT_IB_IFACE_FMT": default GW found but specific rule "
+                  "exists in another interface for %s",
+                  UCT_IB_IFACE_ARG(iface),
+                  ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)));
+    }
+
+    /* No route found at all */
+    if (lo_status == UCS_OK) {
+        uct_iface_fill_info_str_buf(params,
+                                    "remote address %s is not routable "
+                                    "neither by interface "UCT_IB_IFACE_FMT
+                                    " (ifname_index=%u) nor by loopback "
+                                    "interface (ifname_index=%u)",
+                                    ucs_sockaddr_str(sa_remote, remote_str,
+                                                     sizeof(remote_str)),
+                                    UCT_IB_IFACE_ARG(iface),
+                                    ndev_index, lo_ndev_index);
+    } else {
+        uct_iface_fill_info_str_buf(params,
+                                    "remote address %s is not routable by "
+                                    "interface "UCT_IB_IFACE_FMT
+                                    " (ifname_index=%u)",
+                                    ucs_sockaddr_str(sa_remote, remote_str,
+                                                     sizeof(remote_str)),
+                                    UCT_IB_IFACE_ARG(iface), ndev_index);
+    }
+
+    return 0;
 }
 
 static int
