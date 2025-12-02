@@ -29,6 +29,8 @@ typedef struct {
     const struct sockaddr *sa_remote;
     int                    if_index;
     int                    found;
+    int                    found_default_gw; /* Set to 1 if only default GW
+                                                was found for this interface */
     int                    allow_default_gw; /* Allow matching default
                                                 gateway routes */
 } ucs_netlink_route_info_t;
@@ -249,36 +251,81 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
     return UCS_INPROGRESS;
 }
 
+/* Check if a specific (non-default GW) rule exists for the given destination
+ * in any interface except the excluded one */
+static int
+ucs_netlink_has_specific_rule_in_other_ifaces(const struct sockaddr *sa_remote,
+                                               int exclude_if_index)
+{
+    ucs_netlink_rt_rules_t iface_rules;
+    ucs_netlink_route_entry_t *curr_entry;
+    int if_index;
+
+    kh_foreach(&ucs_netlink_routing_table_cache, if_index, iface_rules, {
+        /* Skip the interface we're excluding */
+        if (if_index == exclude_if_index) {
+            continue;
+        }
+
+        ucs_array_for_each(curr_entry, &iface_rules) {
+            /* Only look for specific rules (not default GW) */
+            if (curr_entry->subnet_prefix_len == 0) {
+                continue;
+            }
+
+            if (ucs_sockaddr_is_same_subnet(
+                        sa_remote, (const struct sockaddr *)&curr_entry->dest,
+                        curr_entry->subnet_prefix_len)) {
+                return 1;
+            }
+        }
+    });
+
+    return 0;
+}
+
 static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 {
     ucs_netlink_rt_rules_t *iface_rules;
     ucs_netlink_route_entry_t *curr_entry;
     khiter_t iter;
+    int found_default_gw = 0;
 
     iter = kh_get(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
                   info->if_index);
     if (iter == kh_end(&ucs_netlink_routing_table_cache)) {
-        info->found = 0;
+        info->found            = 0;
+        info->found_default_gw = 0;
         return;
     }
 
     iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
     ucs_array_for_each(curr_entry, iface_rules) {
-
-        if ((curr_entry->subnet_prefix_len == 0) && !info->allow_default_gw) {
-            ucs_trace("iface_index=%d: skipping default gateway route",
-                      info->if_index);
+        /* Check if this is a default gateway route */
+        if (curr_entry->subnet_prefix_len == 0) {
+            if (ucs_sockaddr_is_same_subnet(
+                        info->sa_remote,
+                        (const struct sockaddr *)&curr_entry->dest,
+                        curr_entry->subnet_prefix_len)) {
+                found_default_gw = 1;
+            }
             continue;
         }
 
+        /* Check for specific (non-default GW) rule */
         if (ucs_sockaddr_is_same_subnet(
                                 info->sa_remote,
                                 (const struct sockaddr *)&curr_entry->dest,
                                 curr_entry->subnet_prefix_len)) {
-            info->found = 1;
+            info->found            = 1;
+            info->found_default_gw = 0;
             return;
         }
     }
+
+    /* If we reach here, no specific rule was found */
+    info->found            = 0;
+    info->found_default_gw = found_default_gw;
 }
 
 int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
@@ -304,9 +351,40 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
     info.if_index         = if_index;
     info.sa_remote        = sa_remote;
     info.found            = 0;
+    info.found_default_gw = 0;
     info.allow_default_gw = allow_default_gw;
 
     ucs_netlink_lookup_route(&info);
 
-    return info.found;
+    /* New logic for default GW:
+     * 1. If a specific rule was found for this interface → return 1
+     * 2. If not found:
+     *    a. If current interface is default GW:
+     *       - Look for specific rule in other interfaces
+     *       - If found → return 0 (specific rule will be matched elsewhere)
+     *       - If not found → return 1 (only way to reach destination)
+     *    b. Else → return 0
+     */
+    if (info.found) {
+        /* Specific rule found for this interface */
+        return 1;
+    }
+
+    if (info.found_default_gw) {
+        /* Only default GW found - check if specific rule exists elsewhere */
+        if (ucs_netlink_has_specific_rule_in_other_ifaces(sa_remote, if_index)) {
+            /* Specific rule exists in another interface, return 0 */
+            ucs_trace("iface_index=%d: default GW found but specific rule "
+                      "exists in another interface", if_index);
+            return 0;
+        } else {
+            /* No specific rule anywhere, default GW is the only way */
+            ucs_trace("iface_index=%d: using default GW as only route",
+                      if_index);
+            return 1;
+        }
+    }
+
+    /* No rule found at all */
+    return 0;
 }
