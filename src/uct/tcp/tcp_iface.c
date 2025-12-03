@@ -276,13 +276,13 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 1;
     }
 
-    /* Going to search for a default GW route on this interface. If found, and
-     * at the same time no other specific route exists for this address in any
-     * other interface, return 1. */
     allow_default_gw = !!(tcp_dev_addr->flags &
                           UCT_TCP_DEVICE_ADDR_FLAG_ALLOW_DEFAULT_GW);
 
     if (allow_default_gw && has_default_gw) {
+        /* Going to search for a default GW route on this interface. If found,
+         * and at the same time no other specific route exists for this address
+         * in any other interface, return 1. */
         if (ucs_netlink_has_any_specific_route(
                             (const struct sockaddr *)&remote_addr)) {
             uct_iface_fill_info_str_buf(
