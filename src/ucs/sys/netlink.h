@@ -45,33 +45,34 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
 
 
 /**
- * Check whether a specific route exists for a given network interface and
+ * Check whether a route exists for a given network interface and
  * destination address.
  *
  * @param [in]  if_index           A global index representing the network
  *                                 interface, as assigned by the system
  *                                 (e.g., obtained via if_nametoindex()).
  * @param [in]  sa_remote          Pointer to the destination address.
- * @param [out] has_default_gw_p   Optional pointer to store whether a default
- *                                 gateway route exists for this destination.
- *                                 Set to 1 if route not found and default GW
- *                                 exists, 0 otherwise.
- *                                 Pass NULL if this information is not needed.
+ * @param [out] netmask_len_p      Optional pointer to store the netmask length
+ *                                 of the route found. Pass NULL if this
+ *                                 information is not needed.
  *
- * @return 1 if a specific route exists, or 0 otherwise.
+ * @return 1 if a route exists, or 0 otherwise.
  */
 int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
-                             int *has_default_gw_p);
+                             int *netmask_len_p);
 
 /**
- * Check whether a specific route exists for a given destination address
+ * Check whether a route exists that is better than the given netmask length
  * in ANY network interface.
  *
  * @param [in]  sa_remote         Pointer to the destination address.
+ * @param [in]  netmask_len       The netmask length to compare against.
  *
- * @return 1 if a specific route exists in any interface, or 0 otherwise.
+ * @return 1 if a better route exists that is better than the given netmask
+ *         length, or 0 otherwise.
  */
-int ucs_netlink_has_any_specific_route(const struct sockaddr *sa_remote);
+int ucs_netlink_has_better_route(const struct sockaddr *sa_remote,
+                                 int netmask_len);
 
 END_C_DECLS
 

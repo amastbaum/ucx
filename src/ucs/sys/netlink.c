@@ -29,7 +29,7 @@ typedef struct {
     const struct sockaddr *sa_remote;
     int                    if_index;
     int                    found;
-    int                    found_default_gw;
+    int                    found_netmask_len;
 } ucs_netlink_route_info_t;
 
 
@@ -255,32 +255,15 @@ ucs_netlink_lookup_in_iface_rules(ucs_netlink_route_info_t *info,
     ucs_netlink_route_entry_t *curr_entry;
 
     ucs_array_for_each(curr_entry, iface_rules) {
-        /* Check if this is a default gateway route */
-        if (curr_entry->subnet_prefix_len == 0) {
-            info->found_default_gw = 1;
-            continue;
-        }
-
-        /* Check if this is a specific route */
-        if (ucs_sockaddr_is_same_subnet(
-                info->sa_remote, (const struct sockaddr *)&curr_entry->dest,
-                curr_entry->subnet_prefix_len)) {
-            info->found = 1;
-            return;
+        if (curr_entry->subnet_prefix_len > info->found_netmask_len) {
+            if (ucs_sockaddr_is_same_subnet(
+                    info->sa_remote, (const struct sockaddr *)&curr_entry->dest,
+                    curr_entry->subnet_prefix_len)) {
+                info->found             = 1;
+                info->found_netmask_len = curr_entry->subnet_prefix_len;
+            }
         }
     }
-}
-
-int ucs_netlink_has_any_specific_route(const struct sockaddr *sa_remote)
-{
-    ucs_netlink_rt_rules_t iface_rules;
-    ucs_netlink_route_info_t info = {.sa_remote = sa_remote};
-
-    kh_foreach_value(&ucs_netlink_routing_table_cache, iface_rules, {
-        ucs_netlink_lookup_in_iface_rules(&info, &iface_rules);
-    });
-
-    return info.found;
 }
 
 static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
@@ -298,13 +281,30 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
     ucs_netlink_lookup_in_iface_rules(info, iface_rules);
 }
 
+int ucs_netlink_has_better_route(const struct sockaddr *sa_remote,
+                                 int netmask_len)
+{
+    ucs_netlink_rt_rules_t iface_rules;
+    ucs_netlink_route_info_t info = {.sa_remote         = sa_remote,
+                                     .found             = 0,
+                                     .found_netmask_len = netmask_len};
+
+    kh_foreach_value(&ucs_netlink_routing_table_cache, iface_rules, {
+        ucs_netlink_lookup_in_iface_rules(&info, &iface_rules);
+    });
+
+    return info.found;
+}
+
 int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
-                             int *has_default_gw_p)
+                             int *netmask_len_p)
 {
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     struct rtmsg rtm                 = {0};
-    ucs_netlink_route_info_t info    = {.if_index  = if_index,
-                                        .sa_remote = sa_remote};
+    ucs_netlink_route_info_t info    = {.if_index          = if_index,
+                                        .sa_remote         = sa_remote,
+                                        .found             = 0,
+                                        .found_netmask_len = -1};
 
     UCS_INIT_ONCE(&init_once) {
         rtm.rtm_table  = RT_TABLE_UNSPEC; /* fetch all the tables */
@@ -321,8 +321,8 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
 
     ucs_netlink_lookup_route(&info);
 
-    if (has_default_gw_p != NULL) {
-        *has_default_gw_p = info.found_default_gw;
+    if (netmask_len_p != NULL) {
+        *netmask_len_p = info.found_netmask_len;
     }
 
     return info.found;
