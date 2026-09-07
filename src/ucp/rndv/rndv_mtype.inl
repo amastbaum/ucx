@@ -10,7 +10,6 @@
 #include "rndv.h"
 
 #include <ucp/core/ucp_worker.h>
-#include <ucs/sys/topo/base/topo.h>
 
 
 static ucp_ep_h ucp_proto_rndv_mtype_ep(ucp_worker_t *worker,
@@ -66,10 +65,10 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
      * appropriate pending queue ordered by priority. */
     ucp_trace_req(req,
                   "mtype_fc: mpool exhausted, queue %s mem_type %s "
-                  "sys_dev %s",
+                  "sys_dev %u",
                   (fc_op == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get",
                   ucs_memory_type_names[frag_mem_type],
-                  ucs_topo_sys_device_get_name(frag_sys_dev));
+                  frag_sys_dev);
     UCS_STATS_UPDATE_COUNTER(worker->stats,
                              UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
     ucs_assert(!(req->flags &
@@ -203,7 +202,6 @@ ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
     ucs_assert(fc_op < UCP_WORKER_RNDV_FC_OP_LAST);
     ucs_assert(!ucs_test_all_flags(req->flags,
                                    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED |
@@ -241,8 +239,6 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
     ucp_worker_h worker = req->send.ep->worker;
     ucp_request_t *pending_req;
     unsigned q_index;
-
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
 
     /* Dequeue from highest-priority non-empty queue (PUT/GET before RTR) */
     for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; q_index++) {

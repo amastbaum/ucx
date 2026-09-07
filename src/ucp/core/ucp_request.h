@@ -329,8 +329,12 @@ struct ucp_request {
                                 struct {
                                     /* Size to send in ack message */
                                     ssize_t          ack_data_size;
-                                    /* Element in worker-level pending queue
-                                     * for throttled ppln requests */
+                                    /* Element in worker-level pending queue for
+                                     * throttled ppln, put/mtype, get/mtype and
+                                     * rtr/mtype requests. Sibling union members
+                                     * (e.g. put.*) must stay unused until
+                                     * UCP_REQUEST_FLAG_PROTO_INITIALIZED is
+                                     * set. */
                                     ucs_queue_elem_t queue_elem;
                                 } ppln;
 
