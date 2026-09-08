@@ -1034,7 +1034,8 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
 }
 
 UCS_TEST_P(test_ucp_mmap, rndv_mpool_quota_exhausted,
-           "RNDV_FRAG_SIZE=host:4K", "RNDV_FRAG_ALLOC_COUNT=host:2",
+           "PROTO_ENABLE=y", "RNDV_FRAG_SIZE=host:4K",
+           "RNDV_FRAG_ALLOC_COUNT=host:2",
            "RNDV_FRAG_WORKER_MAX_MEM=8K")
 {
     ucp_mem_desc_t *mdesc1;
@@ -1050,6 +1051,27 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_quota_exhausted,
               ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
                                  UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc3));
 
+    ucs_mpool_put(mdesc2);
+    ucs_mpool_put(mdesc1);
+}
+
+UCS_TEST_P(test_ucp_mmap, rndv_mpool_quota_disabled_with_proto_v1,
+           "PROTO_ENABLE=n", "RNDV_FRAG_SIZE=host:4K",
+           "RNDV_FRAG_ALLOC_COUNT=host:2", "RNDV_FRAG_WORKER_MAX_MEM=8K")
+{
+    ucp_mem_desc_t *mdesc1;
+    ucp_mem_desc_t *mdesc2;
+    ucp_mem_desc_t *mdesc3;
+    ucp_worker_h worker = sender().worker();
+
+    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc1));
+    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc2));
+    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc3));
+
+    ucs_mpool_put(mdesc3);
     ucs_mpool_put(mdesc2);
     ucs_mpool_put(mdesc1);
 }
