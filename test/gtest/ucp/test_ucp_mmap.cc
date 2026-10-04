@@ -15,6 +15,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/string.h>
 #include <ucs/type/float8.h>
 #include <ucs/type/serialize.h>
 }
@@ -1463,6 +1464,66 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
     }
 
     mem_buffer::set_device(orig_dev);
+}
+
+/* The closest-HCA selection ranks an MD by the system devices of its
+ * resources. Device transports name their resources after the GPU, for
+ * example "cuda0-mlx5_0:1", and those resources must not be skipped. */
+UCS_TEST_P(test_ucp_mmap_max_hca, select_ignores_resource_name)
+{
+    modify_config("MAX_HCA_PER_GPU", "auto");
+    entity *e         = create_entity();
+    ucp_context_h ctx = e->ucph();
+
+    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx);
+    if (ucs_popcount(net_md_map) < 2) {
+        UCS_TEST_SKIP_R("need at least 2 network MDs");
+    }
+
+    /* With an unknown memory device all MDs are at the default distance */
+    ucp_md_map_t expected = ucp_context_select_reg_mds(
+            ctx, net_md_map, UCS_SYS_DEVICE_ID_UNKNOWN);
+    ASSERT_NE(0u, expected);
+
+    /* Pick a selected MD which has a resource with a known system device */
+    ucp_md_index_t md_index = UCP_NULL_RESOURCE;
+    for (ucp_rsc_index_t i = 0; i < ctx->num_tls; ++i) {
+        if ((expected & UCS_BIT(ctx->tl_rscs[i].md_index)) &&
+            (ctx->tl_rscs[i].tl_rsc.sys_device < UCP_MAX_SYS_DEVICES)) {
+            md_index = ctx->tl_rscs[i].md_index;
+            break;
+        }
+    }
+    if (md_index == UCP_NULL_RESOURCE) {
+        UCS_TEST_SKIP_R("need a network MD with a known system device");
+    }
+
+    /* Rename the resources of that MD the way device transports do */
+    std::vector<std::pair<ucp_rsc_index_t, std::string> > saved_names;
+    for (ucp_rsc_index_t i = 0; i < ctx->num_tls; ++i) {
+        uct_tl_resource_desc_t *rsc = &ctx->tl_rscs[i].tl_rsc;
+        if (ctx->tl_rscs[i].md_index != md_index) {
+            continue;
+        }
+
+        saved_names.push_back(std::make_pair(i, std::string(rsc->dev_name)));
+        ucs_snprintf_safe(rsc->dev_name, sizeof(rsc->dev_name), "cuda0-%s",
+                          saved_names.back().second.c_str());
+    }
+
+    ucp_md_map_t selected = ucp_context_select_reg_mds(
+            ctx, net_md_map, UCS_SYS_DEVICE_ID_UNKNOWN);
+
+    for (size_t i = 0; i < saved_names.size(); ++i) {
+        ucs_strncpy_safe(ctx->tl_rscs[saved_names[i].first].tl_rsc.dev_name,
+                         saved_names[i].second.c_str(),
+                         sizeof(ctx->tl_rscs[0].tl_rsc.dev_name));
+    }
+
+    EXPECT_EQ(expected, selected);
+    EXPECT_TRUE(selected & UCS_BIT(md_index))
+            << "MD " << ctx->tl_mds[md_index].rsc.md_name
+            << " was dropped because of its resource names";
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mmap_max_hca, all, "all")
